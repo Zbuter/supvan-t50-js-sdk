@@ -193,6 +193,7 @@ onBeforeUnmount(() => {
           @duplicate="editor.duplicateSelection"
           @remove="editor.removeSelection"
           @rotate="editor.rotateSelection"
+          @scale="editor.scaleSelection"
         />
         <LabelCanvas
           :editor="editor"

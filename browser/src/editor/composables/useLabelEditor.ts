@@ -38,6 +38,7 @@ import {
 import { SnapGuideManager } from "../services/snapGuides";
 import {
   nextPreviewRotation,
+  normalizeAngle,
   previewCanvasSize,
   previewViewportTransform,
   type PreviewRotation,
@@ -287,7 +288,7 @@ export function useLabelEditor() {
       y: rounded(rect.top / EDITOR_DOTS_PER_MM),
       width: rounded(width / EDITOR_DOTS_PER_MM),
       height: rounded(height / EDITOR_DOTS_PER_MM),
-      angle: rounded(active.angle),
+      angle: rounded(normalizeAngle(active.angle)),
       fill: THERMAL_BLACK,
       stroke: THERMAL_BLACK,
       strokeWidth: single?.strokeWidth ?? 2,
@@ -416,7 +417,7 @@ export function useLabelEditor() {
     const active = current.getActiveObject();
     if (!active || !Number.isFinite(delta)) return;
     const center = active.getCenterPoint();
-    active.set({ angle: active.angle + delta });
+    active.set({ angle: normalizeAngle(active.angle + delta) });
     // Fabric objects use a top-left origin for editing. Re-anchor after
     // changing the angle so the visual rotation always happens around the
     // object's center instead of moving its top-left corner.
@@ -486,7 +487,7 @@ export function useLabelEditor() {
     }
     else if (key === "angle" && Number.isFinite(numeric)) {
       const center = active.getCenterPoint();
-      active.set({ angle: numeric });
+      active.set({ angle: normalizeAngle(numeric) });
       active.setPositionByOrigin(center, "center", "center");
     }
     else if (key === "fill" && single) single.set({ fill: THERMAL_BLACK });
@@ -665,7 +666,11 @@ export function useLabelEditor() {
     fabricCanvas.value = current;
     snapGuides = new SnapGuideManager(current, physicalCanvasBounds);
     resetHistory(current);
-    const refresh = (): void => scheduleSelectionUpdate();
+    const refresh = (): void => {
+      const active = current.getActiveObject();
+      active?.set({ snapAngle: 90, snapThreshold: 8 });
+      scheduleSelectionUpdate();
+    };
     const showContextMenu = (target: FabricObject, pointer: PointerEvent): void => {
       if (!current.getActiveObjects().includes(target)) current.setActiveObject(target);
       contextMenu.visible = true;
@@ -691,7 +696,10 @@ export function useLabelEditor() {
         scheduleSelectionUpdate();
       }),
       current.on("object:modified", ({ target }) => {
-        if (target) normalizeShapeScale(target);
+        if (target) {
+          target.set({ angle: normalizeAngle(target.angle) });
+          normalizeShapeScale(target);
+        }
         snapGuides?.clear();
         updateSelection();
       }),

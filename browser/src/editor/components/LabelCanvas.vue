@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 
-import { EDITOR_DOTS_PER_MM } from "../constants";
 import type { LabelEditor } from "../composables/useLabelEditor";
-import SelectionPopover from "./SelectionPopover.vue";
 
 const props = defineProps<{
   editor: LabelEditor;
@@ -78,19 +76,6 @@ onBeforeUnmount(() => {
       :data-size="`${editor.label.width} x ${editor.label.height} mm`"
     >
       <canvas ref="canvasElement" aria-label="可编辑标签画布" />
-      <SelectionPopover
-        v-if="editor.selection.value.count"
-        :selection="editor.selection.value"
-        :zoom="editor.zoom.value"
-        :dots-per-mm="EDITOR_DOTS_PER_MM"
-        :paper-width="displayWidth"
-        :paper-height="displayHeight"
-        :rotation="editor.previewRotation.value"
-        @scale="editor.scaleSelection"
-        @rotate="editor.rotateSelection"
-        @duplicate="editor.duplicateSelection"
-        @remove="editor.removeSelection"
-      />
     </div>
   </div>
 </template>

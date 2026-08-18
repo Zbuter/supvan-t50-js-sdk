@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   nextPreviewRotation,
+  normalizeAngle,
   previewCanvasSize,
   previewViewportTransform,
   projectPreviewRect,
@@ -9,6 +10,13 @@ import {
 } from "../src/editor/services/rotation";
 
 describe("editor preview rotation", () => {
+  it("normalizes object angles to one turn", () => {
+    expect(normalizeAngle(0)).toBe(0);
+    expect(normalizeAngle(360)).toBe(0);
+    expect(normalizeAngle(450)).toBe(90);
+    expect(normalizeAngle(-90)).toBe(270);
+  });
+
   it("cycles through all four quarter-turns", () => {
     let rotation: PreviewRotation = 0;
     rotation = nextPreviewRotation(rotation);

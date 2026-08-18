@@ -64,6 +64,8 @@ function commonStyle(): Partial<FabricObject> {
     transparentCorners: false,
     cornerSize: 8,
     lockScalingFlip: true,
+    snapAngle: 90,
+    snapThreshold: 8,
     padding: 2,
   };
 }
@@ -87,6 +89,7 @@ export function configureTextControls(object: Textbox): void {
 }
 
 export function configureEditorObject(object: FabricObject): void {
+  object.set({ snapAngle: 90, snapThreshold: 8 });
   if (object instanceof Textbox) configureTextControls(object);
 
   const kind = getEditorData(object)?.kind;

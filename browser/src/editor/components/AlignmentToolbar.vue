@@ -9,6 +9,8 @@ import {
   AlignStartVertical,
   AlignVerticalSpaceBetween,
   Copy,
+  Minus,
+  Plus,
   RotateCcw,
   RotateCw,
   Trash2,
@@ -22,6 +24,7 @@ const emit = defineEmits<{
   duplicate: [];
   remove: [];
   rotate: [delta: number];
+  scale: [factor: number];
 }>();
 
 const actions = [
@@ -53,6 +56,24 @@ const actions = [
       </button>
     </div>
     <div class="quick-actions" role="group" aria-label="选中对象操作">
+      <button
+        class="icon-button"
+        type="button"
+        title="放大对象"
+        :disabled="selectionCount === 0"
+        @click="emit('scale', 1.1)"
+      >
+        <Plus :size="16" />
+      </button>
+      <button
+        class="icon-button"
+        type="button"
+        title="缩小对象"
+        :disabled="selectionCount === 0"
+        @click="emit('scale', 0.9)"
+      >
+        <Minus :size="16" />
+      </button>
       <button
         class="quick-action"
         type="button"

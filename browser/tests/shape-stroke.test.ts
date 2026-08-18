@@ -14,6 +14,8 @@ describe("shape stroke behavior", () => {
   it("keeps shapes monochrome for thermal output", () => {
     expect(createRectangle(10, 12).stroke).toBe(THERMAL_BLACK);
     expect(createLine(20, 24).stroke).toBe(THERMAL_BLACK);
+    expect(createRectangle(10, 12).snapAngle).toBe(90);
+    expect(createLine(20, 24).snapThreshold).toBe(8);
   });
 
   it("keeps rectangle and line strokes independent from object scaling", () => {

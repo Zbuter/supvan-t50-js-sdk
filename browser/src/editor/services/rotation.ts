@@ -9,6 +9,12 @@ export interface PreviewRect {
 
 export type ViewportTransform = [number, number, number, number, number, number];
 
+export function normalizeAngle(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  const normalized = value % 360;
+  return normalized < 0 ? normalized + 360 : normalized;
+}
+
 export function normalizePreviewRotation(value: number): PreviewRotation {
   const turns = ((Math.round(value) % 4) + 4) % 4;
   return turns as PreviewRotation;
