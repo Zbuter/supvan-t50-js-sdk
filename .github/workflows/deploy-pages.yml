@@ -37,8 +37,18 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
-      - name: Build browser editor
-        run: npm run build --workspace @buterz/t50-browser
+      - name: Build SDK and browser editor
+        run: |
+          npm run build --workspace shuofang-t50-sdk
+          npm run build --workspace @buterz/t50-browser
+
+      - name: Verify browser bundle
+        shell: bash
+        run: |
+          if grep -R -n -E 'amdefine|typeof define' browser/dist; then
+            echo "The browser bundle contains the untransformed lzma-purejs AMD wrapper."
+            exit 1
+          fi
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
