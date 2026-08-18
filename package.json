@@ -1,0 +1,22 @@
+{
+  "name": "shuofang-t50-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "sdk",
+    "browser"
+  ],
+  "scripts": {
+    "dev": "npm run build:lib --workspace shuofang-t50-sdk && npm run dev --workspace @buterz/t50-browser",
+    "build": "npm run build --workspace shuofang-t50-sdk && npm run build --workspace @buterz/t50-browser",
+    "typecheck": "npm run typecheck --workspace shuofang-t50-sdk && npm run typecheck --workspace @buterz/t50-browser",
+    "test": "npm run test --workspace shuofang-t50-sdk && npm run test --workspace @buterz/t50-browser && npm run build:lib --workspace shuofang-t50-sdk",
+    "pack:sdk": "npm run build:lib --workspace shuofang-t50-sdk && npm run pack:check --workspace shuofang-t50-sdk"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "devDependencies": {
+    "rolldown": "^1.2.4"
+  }
+}

@@ -1,0 +1,11 @@
+node_modules/
+.npm-cache/
+.idea/
+dist/
+dist-sdk/
+.vite/
+coverage/
+miniprogram/
+sdk/miniprogram/
+*.log
+.DS_Store

@@ -1,0 +1,66 @@
+{
+  "name": "shuofang-t50-sdk",
+  "version": "0.1.0",
+  "description": "Cross-runtime JavaScript SDK for SUPVAN T50 label printers",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "miniprogram": "./miniprogram",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js",
+      "require": "./dist/browser.cjs"
+    },
+    "./wechat": {
+      "types": "./dist/wechat.d.ts",
+      "import": "./dist/wechat.js",
+      "require": "./dist/wechat.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "miniprogram",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "npm run typecheck && npm run test && npm run build:lib",
+    "build:lib": "vite build && vite build --config vite.wechat.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "pack:check": "npm pack --dry-run --cache ../.npm-cache"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "supvan",
+    "shuofang",
+    "t50",
+    "label-printer",
+    "web-bluetooth",
+    "webhid",
+    "wechat-miniprogram"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "lzma-purejs": "^0.9.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.0",
+    "@types/w3c-web-usb": "^1.0.14",
+    "typescript": "^6.0.3",
+    "vite": "^8.2.0",
+    "vite-plugin-dts": "^4.5.4",
+    "vitest": "^4.1.10"
+  }
+}
