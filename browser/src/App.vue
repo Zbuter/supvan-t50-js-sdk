@@ -166,6 +166,7 @@ onBeforeUnmount(() => {
   <div class="app-shell">
     <TopBar
       :label="editor.label"
+      :preview-rotation="editor.previewRotation.value"
       :zoom="editor.zoom.value"
       :can-undo="editor.canUndo.value"
       :can-redo="editor.canRedo.value"

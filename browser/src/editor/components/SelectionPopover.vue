@@ -2,6 +2,7 @@
 import { Copy, Minus, Plus, RotateCw, Trash2 } from "@lucide/vue";
 import { computed } from "vue";
 
+import { projectPreviewRect, type PreviewRotation } from "../services/rotation";
 import type { SelectionModel } from "../types";
 
 const props = defineProps<{
@@ -9,7 +10,8 @@ const props = defineProps<{
   zoom: number;
   dotsPerMm: number;
   paperWidth: number;
-  rotated: boolean;
+  paperHeight: number;
+  rotation: PreviewRotation;
 }>();
 
 const emit = defineEmits<{
@@ -21,23 +23,28 @@ const emit = defineEmits<{
 
 const placement = computed(() => {
   const scale = props.zoom * props.dotsPerMm;
-  const objectWidth = props.selection.width * scale;
-  const objectHeight = props.selection.height * scale;
-  const objectLeft = props.rotated
-    ? props.paperWidth - (props.selection.y * scale + objectHeight)
-    : props.selection.x * scale;
-  const objectTop = props.rotated ? props.selection.x * scale : props.selection.y * scale;
-  const displayWidth = props.rotated ? objectHeight : objectWidth;
-  const displayHeight = props.rotated ? objectWidth : objectHeight;
-  const desiredLeft = Math.max(0, objectLeft + displayWidth / 2);
+  const printWidth = props.rotation % 2 === 0 ? props.paperWidth : props.paperHeight;
+  const printHeight = props.rotation % 2 === 0 ? props.paperHeight : props.paperWidth;
+  const projected = projectPreviewRect(
+    {
+      left: props.selection.x * scale,
+      top: props.selection.y * scale,
+      width: props.selection.width * scale,
+      height: props.selection.height * scale,
+    },
+    printWidth,
+    printHeight,
+    props.rotation,
+  );
+  const desiredLeft = Math.max(0, projected.left + projected.width / 2);
   // Keep the toolbar inside the canvas column. Without this clamp, a QR code
   // near the right edge makes the toolbar overlap the inspector panel.
   const toolbarHalfWidth = 152;
   const minLeft = toolbarHalfWidth;
   const maxLeft = Math.max(minLeft, props.paperWidth - toolbarHalfWidth);
   const left = Math.min(maxLeft, Math.max(minLeft, desiredLeft));
-  const safeObjectTop = Math.max(0, objectTop);
-  const objectBottom = safeObjectTop + Math.max(24, displayHeight);
+  const safeObjectTop = Math.max(0, projected.top);
+  const objectBottom = safeObjectTop + Math.max(24, projected.height);
   // Put the toolbar above the object when possible. For objects near the top
   // edge, place it below so the canvas viewport does not clip the controls.
   const above = safeObjectTop >= 52;

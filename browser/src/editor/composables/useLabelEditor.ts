@@ -35,6 +35,12 @@ import {
   updateCodeObject,
 } from "../services/objectFactory";
 import { SnapGuideManager } from "../services/snapGuides";
+import {
+  nextPreviewRotation,
+  previewCanvasSize,
+  previewViewportTransform,
+  type PreviewRotation,
+} from "../services/rotation";
 import type {
   AlignAction,
   ContextMenuState,
@@ -47,8 +53,6 @@ import type {
 interface EditorPage extends EditorPageSummary {
   snapshot: string;
 }
-
-type ViewportTransform = [number, number, number, number, number, number];
 
 const EMPTY_SELECTION: SelectionModel = {
   count: 0,
@@ -87,20 +91,11 @@ function isTypingTarget(target: EventTarget | null): boolean {
   );
 }
 
-function identityViewportTransform(): ViewportTransform {
-  return [1, 0, 0, 1, 0, 0];
-}
-
-/** Rotate the editor viewport while keeping object coordinates in print space. */
-function rotatedViewportTransform(height: number): ViewportTransform {
-  return [0, 1, -1, 0, height, 0];
-}
-
 export function useLabelEditor() {
   const fabricCanvas = shallowRef<Canvas>();
   const label = reactive<LabelSize>({ ...DEFAULT_LABEL_SIZE });
   const zoom = ref(1);
-  const previewRotated = ref(false);
+  const previewRotation = ref<PreviewRotation>(0);
   const ready = ref(false);
   const canUndo = ref(false);
   const canRedo = ref(false);
@@ -110,10 +105,10 @@ export function useLabelEditor() {
   const pageBusy = ref(false);
   const contextMenu = reactive<ContextMenuState>({ visible: false, x: 0, y: 0 });
   const displayWidth = computed(
-    () => (previewRotated.value ? label.height : label.width) * EDITOR_DOTS_PER_MM * zoom.value,
+    () => previewCanvasSize(label.width, label.height, previewRotation.value).width * EDITOR_DOTS_PER_MM * zoom.value,
   );
   const displayHeight = computed(
-    () => (previewRotated.value ? label.width : label.height) * EDITOR_DOTS_PER_MM * zoom.value,
+    () => previewCanvasSize(label.width, label.height, previewRotation.value).height * EDITOR_DOTS_PER_MM * zoom.value,
   );
   const pageSummaries = computed<EditorPageSummary[]>(() =>
     pages.value.map(({ id, name }) => ({ id, name })),
@@ -257,18 +252,15 @@ export function useLabelEditor() {
     if (!fabricCanvas.value) return;
     const physicalWidth = label.width * EDITOR_DOTS_PER_MM;
     const physicalHeight = label.height * EDITOR_DOTS_PER_MM;
-    const width = previewRotated.value ? physicalHeight : physicalWidth;
-    const height = previewRotated.value ? physicalWidth : physicalHeight;
+    const displaySize = previewCanvasSize(physicalWidth, physicalHeight, previewRotation.value);
+    const width = displaySize.width;
+    const height = displaySize.height;
     fabricCanvas.value.setDimensions({ width, height });
     fabricCanvas.value.setDimensions(
       { width: Math.round(width * zoom.value), height: Math.round(height * zoom.value) },
       { cssOnly: true },
     );
-    fabricCanvas.value.setViewportTransform(
-      previewRotated.value
-        ? rotatedViewportTransform(physicalHeight)
-        : identityViewportTransform(),
-    );
+    fabricCanvas.value.setViewportTransform(previewViewportTransform(physicalWidth, physicalHeight, previewRotation.value));
     fabricCanvas.value.requestRenderAll();
   }
 
@@ -536,7 +528,7 @@ export function useLabelEditor() {
   }
 
   function rotateLabel(): void {
-    previewRotated.value = !previewRotated.value;
+    previewRotation.value = nextPreviewRotation(previewRotation.value);
     applyDimensions();
   }
 
@@ -546,8 +538,9 @@ export function useLabelEditor() {
   }
 
   function fitToArea(width: number, height: number): void {
-    const logicalWidth = (previewRotated.value ? label.height : label.width) * EDITOR_DOTS_PER_MM;
-    const logicalHeight = (previewRotated.value ? label.width : label.height) * EDITOR_DOTS_PER_MM;
+    const logicalSize = previewCanvasSize(label.width, label.height, previewRotation.value);
+    const logicalWidth = logicalSize.width * EDITOR_DOTS_PER_MM;
+    const logicalHeight = logicalSize.height * EDITOR_DOTS_PER_MM;
     const fitted = Math.floor(Math.min(width / logicalWidth, height / logicalHeight, MAX_AUTO_FIT_ZOOM) * 20) / 20;
     setZoom(fitted);
   }
@@ -750,7 +743,7 @@ export function useLabelEditor() {
     const physicalHeight = label.height * EDITOR_DOTS_PER_MM;
     try {
       current.setDimensions({ width: physicalWidth, height: physicalHeight });
-      current.setViewportTransform(identityViewportTransform());
+      current.setViewportTransform(previewViewportTransform(physicalWidth, physicalHeight, 0));
       current.requestRenderAll();
       return action();
     } finally {
@@ -768,6 +761,8 @@ export function useLabelEditor() {
 
   async function rasterPages(): Promise<RasterPage[]> {
     saveCurrentPage();
+    const physicalWidth = label.width * EDITOR_DOTS_PER_MM;
+    const physicalHeight = label.height * EDITOR_DOTS_PER_MM;
     const element = document.createElement("canvas");
     const temporary = new Canvas(element, {
       width: label.width * EDITOR_DOTS_PER_MM,
@@ -783,7 +778,7 @@ export function useLabelEditor() {
           width: label.width * EDITOR_DOTS_PER_MM,
           height: label.height * EDITOR_DOTS_PER_MM,
         });
-        temporary.setViewportTransform(identityViewportTransform());
+        temporary.setViewportTransform(previewViewportTransform(physicalWidth, physicalHeight, 0));
         temporary.requestRenderAll();
         output.push(exportRaster(temporary));
       }
@@ -797,7 +792,7 @@ export function useLabelEditor() {
     fabricCanvas,
     label,
     zoom,
-    previewRotated,
+    previewRotation,
     ready,
     canUndo,
     canRedo,

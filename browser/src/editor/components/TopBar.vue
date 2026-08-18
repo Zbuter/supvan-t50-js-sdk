@@ -11,10 +11,12 @@ import {
 } from "@lucide/vue";
 
 import { LABEL_SIZES } from "../constants";
+import type { PreviewRotation } from "../services/rotation";
 import type { LabelSize } from "../types";
 
 const props = defineProps<{
   label: LabelSize;
+  previewRotation: PreviewRotation;
   zoom: number;
   canUndo: boolean;
   canRedo: boolean;
@@ -25,6 +27,7 @@ const props = defineProps<{
 
 const landscapeSizes = LABEL_SIZES.filter(({ width, height }) => width > height);
 const portraitSizes = LABEL_SIZES.filter(({ width, height }) => width < height);
+const rotationDegrees = (rotation: PreviewRotation): number => rotation * 90;
 
 const emit = defineEmits<{
   undo: [];
@@ -78,8 +81,8 @@ function selectSize(event: Event): void {
       <button
         class="icon-button"
         type="button"
-        title="旋转编辑视图（打印方向不变）"
-        aria-label="旋转编辑视图"
+        :title="`旋转编辑视图（当前 ${rotationDegrees(previewRotation)}°，点击切换下一个方向；打印方向不变）`"
+        :aria-label="`旋转编辑视图，当前 ${rotationDegrees(previewRotation)}°`"
         @click="emit('rotate')"
       >
         <RotateCw :size="18" />

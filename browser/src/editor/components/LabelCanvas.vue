@@ -37,7 +37,7 @@ function scheduleFit(): void {
 }
 
 watch(
-  () => [props.editor.label.width, props.editor.label.height, props.editor.previewRotated.value],
+  () => [props.editor.label.width, props.editor.label.height, props.editor.previewRotation.value],
   scheduleFit,
   { flush: "post" },
 );
@@ -80,7 +80,8 @@ onBeforeUnmount(() => {
         :zoom="editor.zoom.value"
         :dots-per-mm="EDITOR_DOTS_PER_MM"
         :paper-width="displayWidth"
-        :rotated="editor.previewRotated.value"
+        :paper-height="displayHeight"
+        :rotation="editor.previewRotation.value"
         @scale="editor.scaleSelection"
         @rotate="editor.rotateSelection"
         @duplicate="editor.duplicateSelection"
