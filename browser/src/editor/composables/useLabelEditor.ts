@@ -535,7 +535,7 @@ export function useLabelEditor() {
   }
 
   function setZoom(value: number): void {
-    zoom.value = Math.min(2, Math.max(0.35, Math.round(value * 20) / 20));
+    zoom.value = Math.min(10, Math.max(0.1, Math.round(value * 20) / 20));
     applyDimensions();
   }
 

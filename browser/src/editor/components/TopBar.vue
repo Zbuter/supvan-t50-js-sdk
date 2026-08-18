@@ -95,8 +95,8 @@ function selectSize(event: Event): void {
       </button>
       <input
         type="range"
-        min="0.35"
-        max="2"
+        min="0.1"
+        max="10"
         step="0.05"
         :value="zoom"
         aria-label="画布缩放"

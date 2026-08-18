@@ -11,15 +11,10 @@ const props = defineProps<{
 
 const viewport = ref<HTMLElement>();
 const canvasElement = ref<HTMLCanvasElement>();
-let observer: ResizeObserver | undefined;
 let fitFrame: number | undefined;
-let skipInitialResize = true;
 
-function fit(force = false): void {
+function fit(): void {
   if (!viewport.value) return;
-  // A zoom above 100% intentionally creates scrollbars. Their resize
-  // notification must not be treated as a request to reset the user's zoom.
-  if (!force && props.editor.zoom.value > 1) return;
   const style = getComputedStyle(viewport.value);
   const horizontalPadding = Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight);
   const verticalPadding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
@@ -29,11 +24,11 @@ function fit(force = false): void {
   );
 }
 
-function scheduleFit(force = false): void {
+function scheduleFit(): void {
   if (fitFrame !== undefined) cancelAnimationFrame(fitFrame);
   fitFrame = requestAnimationFrame(() => {
     fitFrame = undefined;
-    fit(force);
+    fit();
   });
 }
 
@@ -43,7 +38,7 @@ function zoomWithWheel(event: WheelEvent): void {
 
 watch(
   () => [props.editor.label.width, props.editor.label.height, props.editor.previewRotation.value],
-  () => scheduleFit(true),
+  scheduleFit,
   { flush: "post" },
 );
 
@@ -51,20 +46,10 @@ onMounted(async () => {
   if (!canvasElement.value || !viewport.value) return;
   await props.editor.initialize(canvasElement.value);
   if (!viewport.value) return;
-  skipInitialResize = true;
-  observer = new ResizeObserver(() => {
-    if (skipInitialResize) {
-      skipInitialResize = false;
-      return;
-    }
-    scheduleFit();
-  });
-  observer.observe(viewport.value);
 });
 
 onBeforeUnmount(() => {
   if (fitFrame !== undefined) cancelAnimationFrame(fitFrame);
-  observer?.disconnect();
   void props.editor.dispose();
 });
 </script>
