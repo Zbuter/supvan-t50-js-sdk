@@ -52,6 +52,79 @@ await printer.disconnect();
 
 `pages` 接受 RGBA 数据（`width * height * 4`）或灰度数据（`width * height`）。默认 `oneByOne: true` 时，上例顺序为“第 1 页、第 2 页、第 1 页、第 2 页”；设为 `false` 时按页面聚合副本。
 
+## DrawObject 打印预览
+
+SDK 提供和 Python 版 `DrawObject` 对应的黑白 Canvas 渲染器。坐标、宽高和字号均使用毫米，渲染时按照型号点密度换算，不会把超出打印头宽度的标签缩小。
+
+浏览器中可以直接生成物理点阵尺寸的预览图，再交给同一个打印接口：
+
+```ts
+import {
+  DrawObjectFormat,
+  previewJob,
+  rasterFromPreviewCanvas,
+  SupvanPrinter,
+  WebBluetoothTransport,
+} from "shuofang-t50-sdk/browser";
+
+const canvases = previewJob({
+  pages: [{
+    width: 40,
+    height: 30,
+    objects: [
+      {
+        x: 3,
+        y: 3,
+        width: 34,
+        height: 8,
+        content: "咖啡豆",
+        format: DrawObjectFormat.Text,
+        fontSize: 4,
+        fontStyle: 1, // Bold
+        autoReturn: true,
+      },
+      {
+        x: 14,
+        y: 13,
+        width: 12,
+        height: 12,
+        content: "https://example.com",
+        format: DrawObjectFormat.QrCode,
+      },
+    ],
+  }],
+  settings: { copies: 2 },
+});
+
+const pages = canvases.map((canvas) => rasterFromPreviewCanvas(canvas));
+const transport = await WebBluetoothTransport.request("T0");
+const printer = new SupvanPrinter(transport);
+await printer.connect();
+await printer.print({
+  pages,
+  settings: { materialWidth: 40, materialHeight: 30, copies: 1, gap: 3, speed: 40 },
+});
+```
+
+只需要一个对象预览时可使用 `previewDrawObject(object, { pageWidth, pageHeight })`。浏览器入口会把文字、二维码、Code 128、EAN-13、矩形、直线和图片统一转换为热敏黑白像素；图片对象传入 `HTMLImageElement`/`ImageBitmap`，或通过 `imageResolver` 返回平台图片源。
+
+小程序不创建 DOM，直接把小程序 Canvas 2D context 传给通用渲染器：
+
+```js
+const { renderDrawPage } = require("shuofang-t50-sdk");
+
+const context = canvasNode.getContext("2d");
+renderDrawPage(context, page, {
+  id: "t50",
+  name: "T50 · 203 DPI",
+  dpi: 8,
+  physicalDpi: 203,
+  maxWidthDots: 384,
+});
+```
+
+`renderDrawJob(job, targetFactory)` 同样支持 `repeat`、`copies` 和 `oneByOne`，顺序与 `printer.print()` 保持一致。Python 版的 `font_name`、`font_size`、`font_style`、`anti_color`、`auto_return` 等下划线字段也可以直接传入。
+
 USB transport 的统一用法：
 
 ```ts

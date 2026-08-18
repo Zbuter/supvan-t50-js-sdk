@@ -1,5 +1,7 @@
 export * from "./compression/lzma";
 export * from "./constants";
+export * from "./draw/renderer";
+export * from "./draw/types";
 export * from "./errors";
 export * from "./printer/ble-printer";
 export * from "./printer/supvan-printer";
@@ -8,5 +10,6 @@ export * from "./protocol/ble";
 export * from "./protocol/usb";
 export * from "./protocol/profile";
 export * from "./raster/raster";
+export * from "./raster/thermal";
 export * from "./transports/transport";
 export * from "./types";

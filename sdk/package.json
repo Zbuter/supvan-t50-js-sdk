@@ -53,7 +53,8 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "lzma-purejs": "^0.9.3"
+    "lzma-purejs": "^0.9.3",
+    "qrcode-generator": "^2.0.4"
   },
   "devDependencies": {
     "@types/node": "^24.7.0",
