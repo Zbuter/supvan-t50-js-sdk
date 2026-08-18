@@ -15,8 +15,11 @@ let observer: ResizeObserver | undefined;
 let fitFrame: number | undefined;
 let skipInitialResize = true;
 
-function fit(): void {
+function fit(force = false): void {
   if (!viewport.value) return;
+  // A zoom above 100% intentionally creates scrollbars. Their resize
+  // notification must not be treated as a request to reset the user's zoom.
+  if (!force && props.editor.zoom.value > 1) return;
   const style = getComputedStyle(viewport.value);
   const horizontalPadding = Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight);
   const verticalPadding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
@@ -26,11 +29,11 @@ function fit(): void {
   );
 }
 
-function scheduleFit(): void {
+function scheduleFit(force = false): void {
   if (fitFrame !== undefined) cancelAnimationFrame(fitFrame);
   fitFrame = requestAnimationFrame(() => {
     fitFrame = undefined;
-    fit();
+    fit(force);
   });
 }
 
@@ -40,7 +43,7 @@ function zoomWithWheel(event: WheelEvent): void {
 
 watch(
   () => [props.editor.label.width, props.editor.label.height, props.editor.previewRotation.value],
-  scheduleFit,
+  () => scheduleFit(true),
   { flush: "post" },
 );
 
