@@ -14,6 +14,7 @@ import {
   EDITOR_DOTS_PER_MM,
   LABEL_SIZE_LIMITS,
   MAX_AUTO_FIT_ZOOM,
+  THERMAL_BLACK,
 } from "../constants";
 import { alignSelection, type CanvasBounds } from "../services/alignment";
 import { downloadPng, exportRaster } from "../services/exportLabel";
@@ -61,8 +62,8 @@ const EMPTY_SELECTION: SelectionModel = {
   width: 0,
   height: 0,
   angle: 0,
-  fill: "#171a18",
-  stroke: "#171a18",
+  fill: THERMAL_BLACK,
+  stroke: THERMAL_BLACK,
   strokeWidth: 2,
   strokeStyle: "solid",
   content: "",
@@ -287,8 +288,8 @@ export function useLabelEditor() {
       width: rounded(width / EDITOR_DOTS_PER_MM),
       height: rounded(height / EDITOR_DOTS_PER_MM),
       angle: rounded(active.angle),
-      fill: typeof single?.fill === "string" ? single.fill : "#171a18",
-      stroke: typeof single?.stroke === "string" ? single.stroke : "#171a18",
+      fill: THERMAL_BLACK,
+      stroke: THERMAL_BLACK,
       strokeWidth: single?.strokeWidth ?? 2,
       strokeStyle: single ? getStrokeStyle(single) : "solid",
       content: text?.text ?? data?.content ?? "",
@@ -488,8 +489,8 @@ export function useLabelEditor() {
       active.set({ angle: numeric });
       active.setPositionByOrigin(center, "center", "center");
     }
-    else if (key === "fill" && single) single.set({ fill: String(value) });
-    else if (key === "stroke" && single) single.set({ stroke: String(value) });
+    else if (key === "fill" && single) single.set({ fill: THERMAL_BLACK });
+    else if (key === "stroke" && single) single.set({ stroke: THERMAL_BLACK });
     else if (key === "strokeWidth" && single && numeric >= 0.5 && numeric <= 32) {
       setShapeStrokeWidth(single, numeric);
     }
@@ -535,6 +536,14 @@ export function useLabelEditor() {
   function setZoom(value: number): void {
     zoom.value = Math.min(2, Math.max(0.35, Math.round(value * 20) / 20));
     applyDimensions();
+  }
+
+  function zoomWithWheel(event: WheelEvent): void {
+    if (!Number.isFinite(event.deltaY) || event.deltaY === 0) return;
+    event.preventDefault();
+    const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
+    const steps = Math.max(-4, Math.min(4, -delta / 100));
+    setZoom(zoom.value * 1.1 ** steps);
   }
 
   function fitToArea(width: number, height: number): void {
@@ -589,7 +598,18 @@ export function useLabelEditor() {
   function handleKeyboard(event: KeyboardEvent): void {
     if (isTypingTarget(event.target)) return;
     const modifier = event.ctrlKey || event.metaKey;
-    if (modifier && event.key.toLowerCase() === "a") {
+    const zoomIn = event.key === "+" || event.key === "=" || event.code === "NumpadAdd";
+    const zoomOut = event.key === "-" || event.key === "_" || event.code === "NumpadSubtract";
+    if (zoomIn && !event.altKey) {
+      event.preventDefault();
+      setZoom(zoom.value + 0.1);
+    } else if (zoomOut && !event.altKey) {
+      event.preventDefault();
+      setZoom(zoom.value - 0.1);
+    } else if (event.key === "0") {
+      event.preventDefault();
+      setZoom(1);
+    } else if (modifier && event.key.toLowerCase() === "a") {
       event.preventDefault();
       selectAll();
     } else if (modifier && event.key.toLowerCase() === "d") {
@@ -822,6 +842,7 @@ export function useLabelEditor() {
     setLabelSize,
     rotateLabel,
     setZoom,
+    zoomWithWheel,
     fitToArea,
     undo,
     redo,

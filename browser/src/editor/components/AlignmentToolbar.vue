@@ -56,9 +56,9 @@ const actions = [
       <button
         class="quick-action"
         type="button"
-        title="逆时针旋转 15°"
+        title="逆时针旋转 90°"
         :disabled="selectionCount === 0"
-        @click="emit('rotate', -15)"
+        @click="emit('rotate', -90)"
       >
         <RotateCcw :size="16" />
         <span>旋转</span>
@@ -86,9 +86,9 @@ const actions = [
       <button
         class="icon-button"
         type="button"
-        title="顺时针旋转 15°"
+        title="顺时针旋转 90°"
         :disabled="selectionCount === 0"
-        @click="emit('rotate', 15)"
+        @click="emit('rotate', 90)"
       >
         <RotateCw :size="16" />
       </button>

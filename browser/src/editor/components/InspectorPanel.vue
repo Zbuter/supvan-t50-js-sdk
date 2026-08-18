@@ -203,7 +203,7 @@ onBeforeUnmount(() => {
           <option v-for="font in FONT_FAMILIES" :key="font" :value="font">{{ font }}</option>
         </select>
       </label>
-      <div class="field-grid field-grid--two">
+      <div class="field-grid">
         <label>
           <span>字号 px</span>
           <input
@@ -212,15 +212,6 @@ onBeforeUnmount(() => {
             max="160"
             :value="selection.fontSize"
             @change="emit('selectionChange', 'fontSize', numberValue($event))"
-          />
-        </label>
-        <label>
-          <span>颜色</span>
-          <input
-            class="color-input"
-            type="color"
-            :value="selection.fill"
-            @input="emit('selectionChange', 'fill', value($event))"
           />
         </label>
       </div>
@@ -283,15 +274,6 @@ onBeforeUnmount(() => {
           </select>
         </label>
       </div>
-      <label class="field-row">
-        <span>颜色</span>
-        <input
-          class="color-input"
-          type="color"
-          :value="selection.stroke"
-          @input="emit('selectionChange', 'stroke', value($event))"
-        />
-      </label>
     </section>
 
   </aside>

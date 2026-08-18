@@ -36,6 +36,10 @@ function scheduleFit(): void {
   });
 }
 
+function zoomWithWheel(event: WheelEvent): void {
+  props.editor.zoomWithWheel(event);
+}
+
 watch(
   () => [props.editor.label.width, props.editor.label.height, props.editor.previewRotation.value],
   scheduleFit,
@@ -65,7 +69,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="viewport" class="canvas-viewport">
+  <div ref="viewport" class="canvas-viewport" @wheel="zoomWithWheel">
     <div class="paper-ruler paper-ruler--horizontal" :style="{ width: `${displayWidth}px` }" />
     <div class="paper-ruler paper-ruler--vertical" :style="{ height: `${displayHeight}px` }" />
     <div

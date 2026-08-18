@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { THERMAL_BLACK } from "../src/editor/constants";
 import {
   applyStrokeStyle,
   createLine,
@@ -10,6 +11,11 @@ import {
 } from "../src/editor/services/objectFactory";
 
 describe("shape stroke behavior", () => {
+  it("keeps shapes monochrome for thermal output", () => {
+    expect(createRectangle(10, 12).stroke).toBe(THERMAL_BLACK);
+    expect(createLine(20, 24).stroke).toBe(THERMAL_BLACK);
+  });
+
   it("keeps rectangle and line strokes independent from object scaling", () => {
     const rectangle = createRectangle(10, 12);
     const line = createLine(20, 24);

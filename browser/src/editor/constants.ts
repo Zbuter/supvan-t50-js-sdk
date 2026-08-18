@@ -11,6 +11,8 @@ export const LABEL_SIZES: LabelSize[] = [
 ];
 
 export const EDITOR_DOTS_PER_MM = 8;
+// T50 is a monochrome thermal printer, so editable ink is always black.
+export const THERMAL_BLACK = "#000000";
 export const DEFAULT_LABEL_SIZE = LABEL_SIZES[1]!;
 export const MAX_AUTO_FIT_ZOOM = 1;
 export const LABEL_SIZE_LIMITS = {

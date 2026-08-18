@@ -1,6 +1,7 @@
 import type { Canvas } from "fabric";
 
 import type { RasterPage } from "shuofang-t50-sdk";
+import { toThermalPixels } from "./monochrome";
 
 export function exportRaster(canvas: Canvas): RasterPage {
   const active = canvas.getActiveObject();
@@ -12,6 +13,7 @@ export function exportRaster(canvas: Canvas): RasterPage {
   const context = element.getContext("2d", { willReadFrequently: true });
   if (!context) throw new Error("无法读取标签画布像素");
   const image = context.getImageData(0, 0, element.width, element.height);
+  image.data.set(toThermalPixels(image.data));
   if (active) canvas.setActiveObject(active);
   canvas.requestRenderAll();
   return { width: image.width, height: image.height, data: image.data };

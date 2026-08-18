@@ -1,6 +1,8 @@
 import { code128, qrcode } from "bwip-js/browser";
 import { FabricImage, Line, Rect, Textbox, type FabricObject } from "fabric";
 
+import { THERMAL_BLACK } from "../constants";
+import { createThermalCanvas } from "./monochrome";
 import type { EditorFabricObject, EditorObjectData, StrokeStyle } from "../types";
 
 function id(): string {
@@ -80,6 +82,8 @@ export function configureTextControls(object: Textbox): void {
     mr: true,
     mtr: true,
   });
+  // T50 is a monochrome thermal printer; keep editor and raster output consistent.
+  object.set({ fill: THERMAL_BLACK });
 }
 
 export function configureEditorObject(object: FabricObject): void {
@@ -87,6 +91,7 @@ export function configureEditorObject(object: FabricObject): void {
 
   const kind = getEditorData(object)?.kind;
   if (kind !== "rectangle" && kind !== "line") return;
+  object.set({ stroke: THERMAL_BLACK });
   const style = getStrokeStyle(object);
   object.set({ strokeUniform: true });
   applyStrokeStyle(object, style);
@@ -134,7 +139,7 @@ export function createText(left: number, top: number): Textbox {
     width: 184,
     fontFamily: "Microsoft YaHei",
     fontSize: 28,
-    fill: "#171a18",
+    fill: THERMAL_BLACK,
     fontWeight: "normal",
     lineHeight: 1.05,
     splitByGrapheme: true,
@@ -152,7 +157,7 @@ export function createRectangle(left: number, top: number): Rect {
     width: 112,
     height: 64,
     fill: "transparent",
-    stroke: "#171a18",
+    stroke: THERMAL_BLACK,
     strokeWidth: 2,
     strokeUniform: true,
   });
@@ -166,7 +171,7 @@ export function createLine(left: number, top: number): Line {
     ...commonStyle(),
     left,
     top,
-    stroke: "#171a18",
+    stroke: THERMAL_BLACK,
     strokeWidth: 2,
     strokeUniform: true,
   });
@@ -185,7 +190,7 @@ function renderCodeCanvas(kind: "barcode" | "qrcode", content: string): HTMLCanv
       paddingwidth: 0,
       paddingheight: 0,
       backgroundcolor: "FFFFFF",
-      barcolor: "171A18",
+      barcolor: "000000",
     });
   } else {
     code128(element, {
@@ -197,7 +202,7 @@ function renderCodeCanvas(kind: "barcode" | "qrcode", content: string): HTMLCanv
       paddingwidth: 0,
       paddingheight: 0,
       backgroundcolor: "FFFFFF",
-      barcolor: "171A18",
+      barcolor: "000000",
     });
   }
   return element;
@@ -246,7 +251,19 @@ export async function createImage(file: File, left: number, top: number): Promis
     reader.onerror = () => reject(reader.error ?? new Error("图片读取失败"));
     reader.readAsDataURL(file);
   });
-  const object = await FabricImage.fromURL(dataUrl);
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const element = new Image();
+    element.onload = () => resolve(element);
+    element.onerror = () => reject(new Error("图片解码失败"));
+    element.src = dataUrl;
+  });
+  const width = image.naturalWidth || image.width;
+  const height = image.naturalHeight || image.height;
+  if (!width || !height) throw new Error("图片尺寸无效");
+  const element = createThermalCanvas(image, width, height);
+  const object = new FabricImage(element, {
+    imageSmoothing: false,
+  });
   const scale = Math.min(160 / Math.max(1, object.width), 110 / Math.max(1, object.height), 1);
   object.set({
     ...commonStyle(),

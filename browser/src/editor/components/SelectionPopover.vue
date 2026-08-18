@@ -71,7 +71,7 @@ const placement = computed(() => {
       <Minus :size="15" />
       <span>缩小</span>
     </button>
-    <button type="button" title="顺时针旋转 15°" @click.stop="emit('rotate', 15)">
+    <button type="button" title="顺时针旋转 90°" @click.stop="emit('rotate', 90)">
       <RotateCw :size="15" />
       <span>旋转</span>
     </button>
