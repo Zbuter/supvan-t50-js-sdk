@@ -15,7 +15,7 @@
     "skipLibCheck": true,
     "declaration": true,
     "declarationMap": true,
-    "types": ["vitest/globals", "w3c-web-usb"]
+    "types": ["vitest/globals"]
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts", "tests/**/*.ts", "*.config.ts", "build/**/*.ts"],
   "exclude": ["dist", "node_modules"]

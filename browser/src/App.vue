@@ -6,7 +6,6 @@ import {
   SupvanPrinter,
   WebBluetoothTransport,
   WebHidTransport,
-  WebUsbTransport,
   detectCapabilities,
   type PrinterTransport,
 } from "shuofang-t50-sdk/browser";
@@ -75,8 +74,7 @@ function closeDeviceDialog(): void {
 
 async function requestTransport(method: DeviceMethod): Promise<PrinterTransport> {
   if (method === "bluetooth") return WebBluetoothTransport.request("T0");
-  if (method === "webhid") return WebHidTransport.request();
-  return WebUsbTransport.request();
+  return WebHidTransport.request();
 }
 
 async function connectDevice(method: DeviceMethod): Promise<void> {

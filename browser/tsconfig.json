@@ -21,7 +21,7 @@
     "isolatedModules": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["vite/client", "vitest/globals", "w3c-web-usb"]
+    "types": ["vite/client", "vitest/globals"]
   },
   "include": [
     "src/**/*.ts",

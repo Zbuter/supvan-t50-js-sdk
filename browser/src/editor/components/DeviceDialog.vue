@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bluetooth, Cable, Check, LoaderCircle, Unplug, Usb, X } from "@lucide/vue";
+import { Bluetooth, Check, LoaderCircle, Unplug, Usb, X } from "@lucide/vue";
 
 import type { RuntimeCapabilities } from "shuofang-t50-sdk/browser";
 import type { DeviceMethod } from "../types";
@@ -41,13 +41,8 @@ const emit = defineEmits<{
         </button>
         <button type="button" :disabled="busy || !capabilities.webHid" @click="emit('select', 'webhid')">
           <Usb :size="22" />
-          <span><strong>USB HID</strong><small>推荐</small></span>
+          <span><strong>USB HID</strong><small>USB 连接</small></span>
           <em>{{ capabilities.webHid ? "可用" : "不支持" }}</em>
-        </button>
-        <button type="button" :disabled="busy || !capabilities.webUsb" @click="emit('select', 'webusb')">
-          <Cable :size="22" />
-          <span><strong>WebUSB</strong><small>备用</small></span>
-          <em>{{ capabilities.webUsb ? "可用" : "不支持" }}</em>
         </button>
       </div>
 

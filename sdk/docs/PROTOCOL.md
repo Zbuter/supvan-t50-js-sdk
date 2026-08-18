@@ -1,6 +1,6 @@
 # 硕方协议实现说明
 
-本文记录 JavaScript 实现必须保持的 Python SDK 行为，便于以后更换压缩库、transport 或重构栅格代码时做回归检查。
+本文记录 JavaScript 实现必须保持的 T50 协议行为，便于以后更换压缩库、transport 或重构栅格代码时做回归检查。需要对照的 Python 参考实现位于 [supvan-t50-python-sdk](https://github.com/Zbuter/supvan-t50-python-sdk)，不在本仓库内。
 
 ## 分层
 
@@ -82,7 +82,7 @@ BLE 图像帧使用 LZMA-Alone，而不是 `.xz` 容器。编码参数：
 
 缺少标签尺寸或间隙时，先读取标签盒 `0x30`。Web Bluetooth 与微信小程序 transport 将多页拆成独立物理任务，以适配浏览器 BLE 写入节奏。
 
-## USB HID / WebUSB
+## USB HID
 
 ### 栅格
 
@@ -93,7 +93,7 @@ BLE 图像帧使用 LZMA-Alone，而不是 `.xz` 容器。编码参数：
 
 USB 图像数据不走 BLE 的 LZMA/`AA BB` 包。传输块由一组完整帧组成，HID transport 再拆成 64 字节报告。
 
-Python 驱动行为会在数据长度刚好为 64 的整数倍时继续发送一个全零报告。`hidReports()` 保留了这个尾包行为，不能改成普通的 `ceil(length / 64)`。
+协议参考实现会在数据长度刚好为 64 的整数倍时继续发送一个全零报告。`hidReports()` 保留了这个尾包行为，不能改成普通的 `ceil(length / 64)`。
 
 ### 厂商命令
 
@@ -121,7 +121,7 @@ Python 驱动行为会在数据长度刚好为 64 的整数倍时继续发送一
   -> 轮询状态直到页计数完成
 ```
 
-WebHID 是浏览器 USB 首选路径。WebUSB 使用 HID bulk endpoint；没有 OUT endpoint 时回退到 class request `SET_REPORT`。如果操作系统内核驱动占用了 HID interface，WebUSB 无法 claim，此时应使用 WebHID。
+T50 的 USB 接口是 HID class，浏览器统一使用 WebHID。
 
 ## 状态与错误
 
@@ -141,7 +141,7 @@ WebHID 是浏览器 USB 首选路径。WebUSB 使用 HID bulk endpoint；没有 
 ```bash
 npm run typecheck
 npm test
-npm run build:sdk
+npm run build --workspace shuofang-t50-sdk
 ```
 
-其中 `tests/lzma.test.ts` 是压缩兼容性的硬门槛；仅检查 `dict_size` 或前 5 字节不足以证明编码流和 Python 一致。
+其中 `tests/lzma.test.ts` 是压缩兼容性的硬门槛；仅检查 `dict_size` 或前 5 字节不足以证明编码流与参考实现一致。

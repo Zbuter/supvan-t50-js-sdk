@@ -68,4 +68,4 @@ export interface ContextMenuState {
   y: number;
 }
 
-export type DeviceMethod = "bluetooth" | "webhid" | "webusb";
+export type DeviceMethod = "bluetooth" | "webhid";

@@ -1,40 +1,29 @@
-# 硕方 T50 JavaScript 工程
+# 硕方 T50 标签打印
 
-项目当前包含两个独立 workspace：可发布的打印 SDK 和 Vue 浏览器编辑器。SDK 协议层不依赖 Vue 或 Fabric.js；浏览器只负责设备接入与标签栅格生成。
+这个项目用于编辑、渲染和打印硕方 T50 标签。页面中的文字、条码、二维码、图片和图形会被转换成 T50 能识别的黑白点阵，再通过 BLE 或 USB HID 发送给打印机。
 
-## 快速开始
+项目提供三种使用方式：直接打开浏览器编辑器制作标签，在 JavaScript/TypeScript 应用中接入 SDK，或在微信小程序中使用 `wx` BLE 打印。
 
-需要 Node.js 20.19 或更高版本。
+## 运行浏览器编辑器
+
+需要 Node.js `>=20.19`。在项目根目录执行：
 
 ```bash
 npm install
 npm run dev
 ```
 
-开发服务器会先构建 SDK，再启动浏览器编辑器。终端会显示实际访问地址，默认从 `http://127.0.0.1:5173/` 开始选择空闲端口。
+开发服务器会先准备打印 SDK，再启动编辑器。访问地址会显示在终端，默认从 `http://127.0.0.1:5173/` 开始寻找可用端口。
 
-## 三个目录
+浏览器设备选择需要在 HTTPS 或 localhost 的用户操作中触发。编辑器支持多页标签、常用和自定义尺寸、文字/条码/二维码/图片/图形对象、撤销重做，以及浓度、间隙、速度和副本设置。
 
-```text
-sdk/          shuofang-t50-sdk，可独立构建和发布到 npm
-browser/      Vue 3 + Fabric.js 多页标签编辑器
-```
+## 接入 SDK
 
-- [SDK 使用与发布](sdk/README.md)
-- [浏览器编辑器](browser/README.md)
-- [协议实现说明](sdk/docs/PROTOCOL.md)
+SDK 可以接收灰度或 RGBA 点阵，也可以把 DrawObject 页面渲染成打印点阵。浏览器使用 Web Bluetooth 或 WebHID，微信小程序使用 `wx` BLE。
 
-微信小程序示例暂未纳入本次提交，待移动端布局重构完成后再单独加入。
-
-## 已实现
-
-- BLE、USB HID 和 WebUSB 协议、状态查询、标签盒读取、停止与打印完成轮询
-- 浏览器 Web Bluetooth、WebHID、WebUSB transport；SDK 同时保留微信小程序 `wx` BLE transport
-- LZMA-Alone 固定头 `5d 00 20 00 00`，字典大小固定为 `8192`
-- 多页任务、文档副本数、单页 `repeat` 与两种页面展开顺序
-- 多页标签编辑、页面复制/删除、常用与自定义纸张、旋转和 100% 默认缩放
-- 框选、多选拖动、吸附、对齐/分布、右键图层、撤销/重做与键盘微调
-- 打印弹框中的浓度、间隙、速度和副本设置
+- [SDK 使用说明](sdk/README.md)
+- [浏览器编辑器说明](browser/README.md)
+- [协议说明](sdk/docs/PROTOCOL.md)
 
 ## 验证
 
@@ -45,8 +34,8 @@ npm run build
 npm run pack:sdk
 ```
 
-## 自动发布
+这些命令检查类型、测试、生产构建和 SDK 打包内容。真实设备连接、蓝牙权限、打印机固件响应和出纸效果需要使用目标打印机单独验证。
 
-推送到 `master` 后，GitHub Actions 会构建 browser 并部署到 GitHub Pages；SDK 版本未发布时会自动发布到 npm。仓库需要配置 Actions secret：`NPM_TOKEN`。
+## 发布
 
-自动化覆盖协议帧、Python 参考 LZMA 字节、多页副本顺序和浏览器构建。BLE、WebHID、WebUSB 和微信真机打印仍应分别使用目标打印机与目标固件完成一次硬件验收。
+推送 `master` 后，GitHub Actions 会根据改动构建 GitHub Pages 页面或发布 SDK。自动发布 SDK 需要配置 `NPM_TOKEN`，同一版本已经存在于 npm 时会跳过发布。
