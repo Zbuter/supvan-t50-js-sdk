@@ -45,4 +45,8 @@ npm run build
 npm run pack:sdk
 ```
 
+## 自动发布
+
+推送到 `master` 后，GitHub Actions 会构建 browser 并部署到 GitHub Pages；SDK 版本未发布时会自动发布到 npm。仓库需要配置 Actions secret：`NPM_TOKEN`。
+
 自动化覆盖协议帧、Python 参考 LZMA 字节、多页副本顺序和浏览器构建。BLE、WebHID、WebUSB 和微信真机打印仍应分别使用目标打印机与目标固件完成一次硬件验收。

@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@lucide/vue": "^1.28.0",
-    "shuofang-t50-sdk": "0.1.0",
+    "shuofang-t50-sdk": "0.1.1",
     "bwip-js": "^4.7.0",
     "fabric": "^7.4.0",
     "vue": "^3.5.40"
