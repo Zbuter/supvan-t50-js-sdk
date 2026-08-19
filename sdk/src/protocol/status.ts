@@ -16,18 +16,47 @@ const DESCRIPTIONS: Record<PrinterState, string> = {
 
 export interface StatusFields extends Omit<PrinterStatus, "state" | "description" | "errorMessage" | "ready"> {}
 
+function statusFlagError(fields: StatusFields): string {
+  if (fields.headOverheat) return DESCRIPTIONS[PrinterState.HeadOverheat];
+  if (fields.coverOpen) return DESCRIPTIONS[PrinterState.CoverOpen];
+  if (fields.mediaNotInstalled || fields.labelNotInstalled) return DESCRIPTIONS[PrinterState.MediaNotInstalled];
+  if (fields.mediaLow) return DESCRIPTIONS[PrinterState.MediaLow];
+  if (fields.mediaNotDetected || fields.labelReadWriteError) return DESCRIPTIONS[PrinterState.MediaNotDetected];
+  if (fields.mediaEmpty) return DESCRIPTIONS[PrinterState.MediaEmpty];
+  if (fields.mediaUnrecognized) return DESCRIPTIONS[PrinterState.MediaUnrecognized];
+  if (fields.batteryLow) return DESCRIPTIONS[PrinterState.BatteryLow];
+  return "";
+}
+
 export function makeStatus(state: PrinterState, fields: StatusFields): PrinterStatus {
-  const description = fields.printing && state === PrinterState.Ready ? "打印中" : DESCRIPTIONS[state];
-  const ready =
-    state === PrinterState.Ready &&
-    !fields.busy &&
-    !fields.printing &&
-    !fields.secondDeviceBusy;
+  const flagError = statusFlagError(fields);
+  const blockingMessage =
+    state !== PrinterState.Ready
+      ? DESCRIPTIONS[state]
+      : flagError ||
+        (fields.secondDeviceBusy
+          ? "打印机被其他设备占用"
+          : fields.printing
+            ? "打印机正在打印"
+            : fields.busy
+              ? "打印机正忙"
+              : "");
+  const description =
+    state === PrinterState.Ready && flagError
+      ? flagError
+      : fields.printing && state === PrinterState.Ready
+        ? "打印中"
+        : DESCRIPTIONS[state];
   return {
     state,
     description,
-    errorMessage: state === PrinterState.Ready ? "" : DESCRIPTIONS[state],
-    ready,
+    errorMessage: blockingMessage,
+    ready:
+      state === PrinterState.Ready &&
+      !flagError &&
+      !fields.busy &&
+      !fields.printing &&
+      !fields.secondDeviceBusy,
     ...fields,
   };
 }

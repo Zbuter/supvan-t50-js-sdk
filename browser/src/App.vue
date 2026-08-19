@@ -8,6 +8,7 @@ import {
   WebHidTransport,
   detectCapabilities,
   type PrinterTransport,
+  type PrinterStatus,
 } from "shuofang-t50-sdk/browser";
 import AlignmentToolbar from "./editor/components/AlignmentToolbar.vue";
 import ContextMenu from "./editor/components/ContextMenu.vue";
@@ -30,15 +31,24 @@ const printDialogOpen = ref(false);
 const resumePrintAfterDevice = ref(false);
 const connectionBusy = ref(false);
 const printBusy = ref(false);
+const statusBusy = ref(false);
 const deviceName = ref("");
 const deviceError = ref("");
 const statusMessage = ref("就绪");
+const printerStatus = shallowRef<PrinterStatus>();
 const printSettings = reactive<PrintSettingsModel>({ density: 4, gap: 3, speed: 40, copies: 1 });
 const toast = reactive({ visible: false, message: "", error: false });
+let statusRequest: Promise<PrinterStatus> | undefined;
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
 const connected = computed(() => Boolean(printer.value?.connected));
-const busy = computed(() => connectionBusy.value || printBusy.value);
+const transportKind = computed(() => printer.value?.transport.kind ?? "");
+const statusError = computed(() => {
+  const status = printerStatus.value;
+  return status && !status.ready ? status.errorMessage || status.description : "";
+});
+const printerReady = computed(() => Boolean(connected.value && printerStatus.value?.ready));
+const busy = computed(() => connectionBusy.value || printBusy.value || statusBusy.value);
 
 function showToast(message: string, error = false): void {
   toast.visible = true;
@@ -72,6 +82,38 @@ function closeDeviceDialog(): void {
   }
 }
 
+function applyPrinterStatus(status: PrinterStatus): void {
+  printerStatus.value = status;
+  statusMessage.value = status.description;
+}
+
+function readPrinterStatus(): Promise<PrinterStatus> {
+  const currentPrinter = printer.value;
+  if (!currentPrinter?.connected) return Promise.reject(new Error("打印机尚未连接"));
+  if (statusRequest) return statusRequest;
+
+  statusRequest = currentPrinter.getStatus().then((status) => {
+    if (printer.value === currentPrinter) applyPrinterStatus(status);
+    return status;
+  }).finally(() => {
+    statusRequest = undefined;
+  });
+  return statusRequest;
+}
+
+async function refreshPrinterStatus(): Promise<void> {
+  if (!printer.value?.connected || statusBusy.value) return;
+  statusBusy.value = true;
+  try {
+    await readPrinterStatus();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    showToast(message, true);
+  } finally {
+    statusBusy.value = false;
+  }
+}
+
 async function requestTransport(method: DeviceMethod): Promise<PrinterTransport> {
   if (method === "bluetooth") return WebBluetoothTransport.request("T0");
   return WebHidTransport.request();
@@ -82,16 +124,18 @@ async function connectDevice(method: DeviceMethod): Promise<void> {
   deviceError.value = "";
   statusMessage.value = "正在连接";
   try {
+    statusRequest = undefined;
     if (printer.value?.connected) await printer.value.disconnect();
     const transport = await requestTransport(method);
     const next = new SupvanPrinter(transport);
     await next.connect();
     const status = await next.getStatus();
     printer.value = next;
+    applyPrinterStatus(status);
     deviceName.value = transport.name;
-    statusMessage.value = status.description;
     closeDeviceDialog();
-    showToast(`${transport.name} 已连接`);
+    if (status.ready) showToast(`${transport.name} 已连接`);
+    else showToast(status.errorMessage || status.description, true);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     deviceError.value = message;
@@ -105,8 +149,10 @@ async function connectDevice(method: DeviceMethod): Promise<void> {
 async function disconnectDevice(): Promise<void> {
   connectionBusy.value = true;
   try {
+    statusRequest = undefined;
     await printer.value?.disconnect();
     printer.value = undefined;
+    printerStatus.value = undefined;
     deviceName.value = "";
     statusMessage.value = "就绪";
     closeDeviceDialog();
@@ -117,17 +163,25 @@ async function disconnectDevice(): Promise<void> {
 }
 
 async function printLabel(settings: PrintSettingsModel): Promise<void> {
-  if (!printer.value?.connected) {
+  const currentPrinter = printer.value;
+  if (!currentPrinter?.connected) {
     openDeviceDialog(true);
     showToast("请先连接打印机", true);
     return;
   }
   printBusy.value = true;
-  statusMessage.value = "正在打印";
   Object.assign(printSettings, settings);
   try {
+    const status = await readPrinterStatus();
+    if (!status.ready) {
+      const message = status.errorMessage || status.description;
+      statusMessage.value = message;
+      showToast(message, true);
+      return;
+    }
+    statusMessage.value = "正在打印";
     const pages = await editor.rasterPages();
-    await printer.value.print({
+    await currentPrinter.print({
       pages,
       settings: {
         materialWidth: editor.label.width,
@@ -143,7 +197,7 @@ async function printLabel(settings: PrintSettingsModel): Promise<void> {
     showToast(`${pages.length} 页 × ${settings.copies} 份已打印`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    statusMessage.value = "打印失败";
+    statusMessage.value = message;
     showToast(message, true);
   } finally {
     printBusy.value = false;
@@ -217,6 +271,10 @@ onBeforeUnmount(() => {
           :message="statusMessage"
           :page-index="editor.activePageIndex.value"
           :page-count="editor.pages.value.length"
+          :status="printerStatus"
+          :transport-kind="transportKind"
+          :refreshing="statusBusy"
+          @refresh="refreshPrinterStatus"
         />
       </main>
 
@@ -256,7 +314,9 @@ onBeforeUnmount(() => {
       :page-count="editor.pages.value.length"
       :connected="connected"
       :device-name="deviceName"
-      :busy="printBusy"
+      :status-error="statusError"
+      :ready="printerReady"
+      :busy="busy"
       @close="printDialogOpen = false"
       @connect="openDeviceDialog(true)"
       @confirm="printLabel"

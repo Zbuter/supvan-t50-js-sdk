@@ -19,7 +19,7 @@ npm run dev
 
 ## 接入 SDK
 
-SDK 可以接收灰度或 RGBA 点阵，也可以把 DrawObject 页面渲染成打印点阵。浏览器使用 Web Bluetooth 或 WebHID，微信小程序使用 `wx` BLE。
+SDK 可以接收灰度或 RGBA 图像作为输入，但 T50 最终只打印黑白点阵：灰度会在发送前按热敏阈值转换为黑白，不是连续灰度打印。SDK 也可以把 DrawObject 页面渲染成打印点阵。浏览器使用 Web Bluetooth 或 WebHID，微信小程序使用 `wx` BLE。
 
 - [SDK 使用说明](sdk/README.md)
 - [浏览器编辑器说明](browser/README.md)

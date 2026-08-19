@@ -20,6 +20,8 @@ export const LABEL_SIZE_LIMITS = {
   height: { min: 5, max: 120 },
 } as const;
 export const SNAP_THRESHOLD = 4;
+export const SNAP_RELEASE_THRESHOLD = 8;
+export const SNAP_SETTLE_DELAY_MS = 50;
 
 export const FONT_FAMILIES = [
   "Microsoft YaHei",

@@ -55,7 +55,8 @@ export class WebHidTransport implements PrinterTransport {
   private readonly onInputReport = (event: Event): void => {
     const { data } = event as HidInputReportEventLike;
     const report = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-    // The native driver discards the first on-wire protocol byte on HID reads.
+    // WebHID data excludes reportId, but the T50 protocol still prefixes the
+    // response with one byte that the native USB transport removes.
     this.queue.push(report.slice(Math.min(1, report.length)));
   };
 

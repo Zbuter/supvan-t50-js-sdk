@@ -8,6 +8,7 @@ export const BLE_MAX_LINES_PER_FRAME = Math.floor(
 );
 export const USB_FRAME_DATA_SIZE = 4074;
 export const HID_REPORT_SIZE = 64;
+export const HID_INPUT_PAYLOAD_SIZE = HID_REPORT_SIZE - 1;
 
 export const SUPVAN_VENDOR_ID = 0x1820;
 export const T50_PRODUCT_IDS = [

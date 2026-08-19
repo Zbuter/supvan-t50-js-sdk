@@ -575,12 +575,13 @@ textarea:focus-visible {
 }
 
 .status-bar {
+  position: relative;
   display: flex;
   min-width: 0;
   align-items: center;
   gap: 18px;
   padding: 0 12px;
-  overflow: hidden;
+  overflow: visible;
   border-top: 1px solid var(--line);
   color: var(--muted);
   background: var(--surface);
@@ -609,6 +610,57 @@ textarea:focus-visible {
 .connection-state.connected i {
   background: #15955f;
   box-shadow: 0 0 0 2px #d8eee3;
+}
+
+.status-device-anchor {
+  position: relative;
+  width: min(240px, 30vw);
+  min-width: min(240px, 30vw);
+  flex: 0 0 min(240px, 30vw);
+  margin-left: auto;
+}
+
+.status-device-trigger {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font-size: inherit;
+  text-align: right;
+  justify-content: flex-end;
+}
+
+.status-device-trigger.connection-state {
+  margin-left: 0;
+}
+
+.status-device-anchor > .status-device-trigger {
+  margin-left: 0;
+}
+
+.status-device-trigger:hover {
+  color: var(--accent-strong);
+}
+
+.status-tooltip {
+  position: absolute;
+  z-index: 40;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: min(430px, calc(100vw - 24px));
+  max-height: min(560px, calc(100dvh - 70px));
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(25, 31, 27, 0.16);
+  white-space: normal;
+}
+
+.status-tooltip .device-status-panel {
+  margin: 0;
 }
 
 .inspector-panel {
@@ -853,6 +905,109 @@ textarea:focus-visible {
 
 .print-dialog__body {
   padding: 4px 18px 18px;
+}
+
+.device-status-panel {
+  margin: 0 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-soft);
+}
+
+.device-status-panel__heading {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.device-status-panel__heading > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.device-status-panel__heading-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.device-status-panel__heading-actions > strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--accent-strong);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-status-panel__heading-actions > strong.is-error,
+.device-status-item > strong.is-error {
+  color: var(--danger);
+}
+
+.device-status-refresh {
+  width: 26px;
+  height: 26px;
+  flex-basis: 26px;
+}
+
+.device-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 12px;
+  padding: 0 10px 4px;
+}
+
+.device-status-empty {
+  margin: 0;
+  padding: 14px 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.device-status-item {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 30px;
+  padding: 5px 2px;
+  border-bottom: 1px solid #e4e8e5;
+}
+
+.device-status-item > span {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.device-status-item > strong {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  word-break: break-word;
+}
+
+.device-status-item--raw {
+  grid-column: 1 / -1;
+}
+
+.dialog-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .print-summary {
@@ -1239,6 +1394,14 @@ textarea:focus-visible {
 
   .print-field-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .device-status-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .device-status-item--raw {
+    grid-column: auto;
   }
 
   .print-field--copies {

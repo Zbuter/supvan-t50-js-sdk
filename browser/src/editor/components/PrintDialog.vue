@@ -10,6 +10,8 @@ const props = defineProps<{
   pageCount: number;
   connected: boolean;
   deviceName: string;
+  statusError: string;
+  ready: boolean;
   busy: boolean;
 }>();
 
@@ -56,6 +58,7 @@ function submit(): void {
       </header>
 
       <div class="print-dialog__body">
+        <p v-if="statusError" class="dialog-error">{{ statusError }}</p>
         <div class="print-summary">
           <Files :size="18" />
           <span>{{ pageCount }} 页</span>
@@ -98,7 +101,7 @@ function submit(): void {
         >
           <Bluetooth :size="16" />连接打印机
         </button>
-        <button class="command-button command-button--primary" type="submit" :disabled="busy || !connected">
+        <button class="command-button command-button--primary" type="submit" :disabled="busy || !connected || !ready">
           <Printer :size="16" />打印 {{ pageCount * draft.copies }} 张
         </button>
       </footer>

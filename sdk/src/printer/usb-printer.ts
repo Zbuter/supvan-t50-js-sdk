@@ -1,4 +1,4 @@
-import { USB_COMMANDS } from "../constants";
+import { HID_INPUT_PAYLOAD_SIZE, USB_COMMANDS } from "../constants";
 import { CommunicationError, DeviceError, TimeoutError } from "../errors";
 import { SUPVAN_T50_PROFILE, type PrinterProfile } from "../protocol/profile";
 import { parseLabelBoxData } from "../protocol/ble";
@@ -63,7 +63,11 @@ export class UsbPrinter {
     let received = 0;
     while (received < length && Date.now() < deadline) {
       try {
-        const chunk = await this.transport.read(length - received, Math.max(1, deadline - Date.now()));
+        // WebHID removes the protocol prefix before queuing data, leaving 63
+        // bytes per 64-byte input report. Consume that whole payload so its
+        // padding cannot become the next command's response.
+        const readSize = Math.max(length - received, HID_INPUT_PAYLOAD_SIZE);
+        const chunk = await this.transport.read(readSize, Math.max(1, deadline - Date.now()));
         chunks.push(chunk);
         received += chunk.length;
       } catch (error) {

@@ -115,7 +115,9 @@ export class BlePrinter {
     let last: PrinterStatus | undefined;
     while (Date.now() < deadline) {
       last = await this.getStatus(Math.max(100, deadline - Date.now()));
-      if (last.state !== 0 && last.state !== 8) throw new DeviceError(last.description);
+      if (last.state !== 0 && last.state !== 8) {
+        throw new DeviceError(last.errorMessage || last.description);
+      }
       if (predicate(last)) return last;
       await sleep(100);
     }
@@ -124,11 +126,15 @@ export class BlePrinter {
 
   private async printOnce(pages: RasterPage[], settings: ResolvedPrintSettings): Promise<void> {
     const initial = await this.getStatus();
-    if (!initial.ready) throw new DeviceError(initial.description);
+    if (!initial.ready) throw new DeviceError(initial.errorMessage || initial.description);
     const pageBatches = pages.map((page, index) =>
       compressedBleBatches(bleImageFrames(page, settings, index === pages.length - 1)),
     );
     await this.exchange(buildR1(0x13), 0x13);
+    const afterStart = await this.getStatus();
+    if (!afterStart.ready && !afterStart.printing && !afterStart.busy) {
+      throw new DeviceError(afterStart.errorMessage || afterStart.description);
+    }
     let firstBatch = true;
     for (const batches of pageBatches) {
       for (const batch of batches) {

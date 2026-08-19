@@ -1,9 +1,13 @@
-import type { Canvas } from "fabric";
+import type { Canvas, FabricObject } from "fabric";
 
 export interface HistoryState {
   canUndo: boolean;
   canRedo: boolean;
 }
+
+type CanvasObjectEvent = {
+  target: FabricObject;
+};
 
 export class EditorHistory {
   private snapshots: string[] = [];
@@ -16,8 +20,11 @@ export class EditorHistory {
     private readonly canvas: Canvas,
     private readonly onChange: (state: HistoryState) => void,
     private readonly limit = 60,
+    private readonly shouldTrack: (event: CanvasObjectEvent) => boolean = () => true,
   ) {
-    const schedule = (): void => this.scheduleCapture();
+    const schedule = (event: CanvasObjectEvent): void => {
+      if (this.shouldTrack(event)) this.scheduleCapture();
+    };
     this.disposers = [
       canvas.on("object:added", schedule),
       canvas.on("object:removed", schedule),

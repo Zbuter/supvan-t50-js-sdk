@@ -1,66 +1,464 @@
 # shuofang-t50-sdk
 
-这是一个面向硕方 T50 标签打印机的 TypeScript SDK。它把灰度/RGBA 点阵或 DrawObject 页面转换成 T50 协议数据，并通过 BLE、USB HID 或微信 `wx` BLE 完成打印。
+用于在 JavaScript/TypeScript 应用中连接硕方 T50 标签打印机、准备打印数据、渲染标签页面并执行 BLE 或 USB HID 打印。
+
+SDK 接收两类输入：
+
+- <code>RasterPage</code>：已经按打印点生成的灰度或 RGBA 输入图像；发送前会转换成黑白点阵。
+- <code>DrawPage</code> / <code>DrawJob</code>：使用毫米坐标描述文字、二维码、条码、图片、矩形和直线，由 SDK 渲染成打印点阵。
 
 ## 安装
 
-```bash
+~~~bash
 npm install shuofang-t50-sdk
-```
+~~~
 
-浏览器和微信小程序分别使用对应入口：
+按运行环境选择入口：
 
-| 导入 | 用途 |
+| 入口 | 适用场景 |
 | --- | --- |
-| `shuofang-t50-sdk/browser` | Web Bluetooth、WebHID 和浏览器 Canvas 预览 |
-| `shuofang-t50-sdk/wechat` | 微信小程序 `wx` BLE，不依赖 DOM |
-| `shuofang-t50-sdk` | 通用打印 API、栅格和 DrawObject 渲染器 |
+| <code>shuofang-t50-sdk/browser</code> | 浏览器 Web Bluetooth、WebHID、Canvas 预览，以及通用打印 API |
+| <code>shuofang-t50-sdk/wechat</code> | 微信小程序 <code>wx</code> BLE，以及通用打印 API |
+| <code>shuofang-t50-sdk</code> | 同时需要浏览器入口和微信 BLE 入口的代码 |
 
-## 用浏览器打印
+浏览器的设备选择必须在 HTTPS 或 <code>localhost</code> 中，并且通常需要由用户点击事件直接触发。微信小程序使用 <code>wx</code> 提供的 BLE API，不使用浏览器 DOM。
 
-设备选择要在 HTTPS 或 localhost 的用户操作中调用。下面的例子打印两页 40 x 30 mm 的白色标签：
+## 最短打印示例
 
-```ts
-import { PaperType, SupvanPrinter, WebBluetoothTransport } from "shuofang-t50-sdk/browser";
+下面的示例打印一张 40 x 30 mm 的空白标签。T50 默认是 8 点/mm，所以图像尺寸为 320 x 240 点。
 
-const pageData = new Uint8ClampedArray(320 * 240 * 4).fill(255);
-const printer = new SupvanPrinter(await WebBluetoothTransport.request("T0"));
+~~~ts
+import {
+  PaperType,
+  SupvanPrinter,
+  WebBluetoothTransport,
+} from "shuofang-t50-sdk/browser";
+
+const data = new Uint8Array(320 * 240);
+data.fill(255); // 灰度值：0 是黑色，255 是白色
+
+const transport = await WebBluetoothTransport.request("T0");
+const printer = new SupvanPrinter(transport);
 
 await printer.connect();
-await printer.print({
-  pages: [
-    { width: 320, height: 240, data: pageData },
-    { width: 320, height: 240, data: pageData },
-  ],
-  settings: {
-    materialWidth: 40,
-    materialHeight: 30,
-    paperType: PaperType.Gap,
-    density: 4,
-    gap: 3,
-    speed: 40,
-    copies: 2,
-  },
-});
-await printer.disconnect();
-```
+try {
+  await printer.print({
+    pages: [{ width: 320, height: 240, data }],
+    settings: {
+      materialWidth: 40,
+      materialHeight: 30,
+      paperType: PaperType.Gap,
+      gap: 3,
+      density: 4,
+      speed: 40,
+      copies: 1,
+    },
+  });
+} finally {
+  await printer.disconnect();
+}
+~~~
 
-`width` 和 `height` 是打印点数，不是毫米。`data` 可以是灰度数据（`width * height`）或 RGBA 数据（`width * height * 4`）。`copies` 控制文档副本数，页面可以用 `repeat` 重复；`oneByOne: false` 时会按页面聚合副本。
+<code>WebBluetoothTransport.request("T0")</code> 中的 <code>T0</code> 是设备名称前缀，不是固定设备地址。需要 USB HID 时，将 transport 换成：
 
-USB 打印使用 WebHID：
-
-```ts
+~~~ts
 import { SupvanPrinter, WebHidTransport } from "shuofang-t50-sdk/browser";
 
 const printer = new SupvanPrinter(await WebHidTransport.request());
 await printer.connect();
-```
+~~~
 
-## 把页面渲染成点阵
+## 打印数据
 
-浏览器 Canvas 预览按 T50 的实际点数渲染文字、二维码、Code 128、EAN-13、图片、矩形和直线。坐标、尺寸和字号使用毫米：
+### <code>RasterPage</code>
 
-```ts
+~~~ts
+interface RasterPage {
+  width: number;
+  height: number;
+  data: Uint8Array | Uint8ClampedArray;
+  repeat?: number;
+}
+~~~
+
+| 字段 | 单位/格式 | 说明 |
+| --- | --- | --- |
+| <code>width</code> | 点 | 图像宽度，必须是正整数；不能超过当前型号的最大打印宽度 |
+| <code>height</code> | 点 | 图像高度，必须是正整数 |
+| <code>data</code> | 灰度或 RGBA | 灰度长度必须是 <code>width * height</code>；RGBA 长度必须是 <code>width * height * 4</code> |
+| <code>repeat</code> | 次数 | 当前页面连续打印次数，默认 <code>1</code>，必须是正整数 |
+
+灰度数据使用 <code>0</code> 到 <code>255</code> 表示黑到白。RGBA 数据会先按亮度和透明度转换为灰度，再按热敏阈值转换为黑白。T50 不支持连续灰度打印，灰度值只用于阈值判断；<code>density</code> 调整热敏头打印浓度，也不会产生灰度级别。SDK 不会因为图像太宽而自动缩放；超出 <code>maxDotValue</code> 会抛出 <code>ValidationError</code>。
+
+### <code>PrintJob</code>
+
+~~~ts
+interface PrintJob {
+  pages: RasterPage[];
+  settings?: PrintSettings;
+}
+~~~
+
+<code>pages</code> 不能为空。每个页面先应用自己的 <code>repeat</code>，再根据 <code>settings.copies</code> 展开：
+
+- <code>oneByOne: true</code>（默认）：<code>第 1 份的全部页面 -> 第 2 份的全部页面</code>。
+- <code>oneByOne: false</code>：<code>第 1 页的全部份数 -> 第 2 页的全部份数</code>。
+
+例如两页、<code>copies: 2</code> 时，默认顺序是 <code>A, B, A, B</code>；关闭 <code>oneByOne</code> 后是 <code>A, A, B, B</code>。
+
+## 打印参数
+
+### <code>PrintSettings</code>
+
+所有尺寸字段 <code>materialWidth</code>、<code>materialHeight</code>、<code>gap</code> 使用毫米。图像 <code>RasterPage.width</code> 和 <code>height</code> 使用打印点，两者不是同一个单位。
+
+| 字段 | 默认值 | 有效范围 | 作用 |
+| --- | ---: | --- | --- |
+| <code>materialWidth</code> | <code>48</code> | <code>1</code> 到 <code>50</code> mm | 耗材宽度。影响协议耗材参数和居中区域；省略时优先使用已读取耗材信息 |
+| <code>materialHeight</code> | <code>30</code> | <code>1</code> 到 <code>120</code> mm | 单张标签高度。BLE 会用它建立打印工作区高度；省略时优先使用已读取耗材信息 |
+| <code>copies</code> | <code>1</code> | <code>1</code> 到 <code>99</code> | 整个任务的份数；通常应传整数 |
+| <code>rotate</code> | <code>0</code> | <code>0</code> 到 <code>4</code> | BLE 图像预处理旋转：<code>0</code> 不旋转，<code>1</code>/<code>2</code>/<code>3</code> 分别旋转 90/180/270 度；<code>4</code> 在 BLE 路径中等同于 <code>0</code> |
+| <code>density</code> | <code>4</code> | <code>0</code> 到 <code>9</code> | 热敏打印浓度，数值越大通常越深 |
+| <code>horizontalOffset</code> | <code>0</code> | <code>-9</code> 到 <code>9</code> | 图像水平偏移，单位是打印点；正数向右 |
+| <code>verticalOffset</code> | <code>0</code> | <code>-9</code> 到 <code>9</code> | 图像垂直偏移，单位是打印点；正数向下 |
+| <code>paperType</code> | <code>PaperType.Gap</code> | <code>1</code>、<code>2</code>、<code>5</code> | 纸张检测方式，见下表 |
+| <code>gap</code> | <code>3</code> | <code>0</code> 到 <code>8</code> mm | 相邻标签之间的间隙；省略时优先使用已读取耗材信息 |
+| <code>oneByOne</code> | <code>true</code> | 布尔值 | 控制多页任务的份数展开顺序 |
+| <code>tailLength</code> | <code>0</code> | 协议字节值 | BLE 参数块中的尾部长度字段；当前 SDK 不单独校验它，通常保持 <code>0</code> |
+| <code>direction</code> | <code>0</code> | <code>0</code> 到 <code>3</code> | USB 图像方向。USB 路径使用 <code>0 -> 0°</code>、<code>1 -> 180°</code>、<code>2 -> 270°</code>、<code>3 -> 90°</code> 顺时针旋转 |
+| <code>speed</code> | <code>40</code> | <code>20</code> 到 <code>60</code> | USB 传输时下发给打印机的速度参数；当前 BLE 打印路径不使用它控制传输速度 |
+| <code>maxDotValue</code> | <code>384</code> | <code>1</code> 到 <code>384</code> | 当前图像工作区的最大宽度，单位是点；不会自动缩放 |
+| <code>dpi</code> | <code>8</code> | <code>0.1</code> 到 <code>32</code> | 协议使用的点密度，实际含义是“点/mm”，不是屏幕 DPI；T50 为 <code>8</code> 点/mm |
+
+### <code>PaperType</code>
+
+~~~ts
+enum PaperType {
+  Gap = 1,
+  BlackMark = 2,
+  BlackMarkCard = 5,
+}
+~~~
+
+| 值 | 含义 |
+| ---: | --- |
+| <code>PaperType.Gap</code> | 使用标签间隙定位 |
+| <code>PaperType.BlackMark</code> | 使用黑标定位 |
+| <code>PaperType.BlackMarkCard</code> | 使用黑标卡片类耗材定位 |
+
+对于 USB，设备耗材配置块会把小于 <code>2</code> 的 <code>gap</code> 按 <code>2</code> 写入；如果使用 USB，建议直接传打印机耗材上的实际值。
+
+### 参数解析和耗材自动读取
+
+<code>resolvePrintSettings(settings?, labelBox?, profile?)</code> 返回包含所有字段的 <code>ResolvedPrintSettings</code>：
+
+~~~ts
+const resolved = resolvePrintSettings(
+  { density: 5, copies: 2 },
+  labelBox,
+  SUPVAN_T50_PROFILE,
+);
+~~~
+
+字段的解析优先级如下：
+
+1. <code>settings</code> 中明确传入的值。
+2. <code>materialWidth</code>、<code>materialHeight</code>、<code>gap</code> 使用 <code>labelBox</code> 中的值。
+3. T50 默认值或传入 <code>PrinterProfile</code> 的 <code>maxWidthDots</code>、<code>dpi</code>。
+
+<code>SupvanPrinter.print()</code> 在这三个耗材字段任意一个缺失时，会先调用 <code>readLabelBox()</code>，再解析设置。因此不想从打印机读取耗材信息时，应同时传入 <code>materialWidth</code>、<code>materialHeight</code> 和 <code>gap</code>。
+
+<code>expandPrintPages(job)</code> 会校验页面尺寸、<code>repeat</code> 和像素长度，并返回按照 <code>copies</code>、<code>repeat</code>、<code>oneByOne</code> 展开后的页面数组。它适合在真正连接打印机前检查任务展开结果。
+
+## 打印机对象
+
+### <code>SupvanPrinter</code>
+
+<code>SupvanPrinter</code> 根据 <code>transport.kind</code> 自动选择 BLE 或 USB 后端。
+
+~~~ts
+interface SupvanPrinterOptions {
+  ble?: BlePrinterOptions;
+  usb?: UsbPrinterOptions;
+  profile?: PrinterProfile;
+}
+~~~
+
+| 成员 | 返回值 | 说明 |
+| --- | --- | --- |
+| <code>connected</code> | <code>boolean</code> | 当前连接状态 |
+| <code>connect()</code> | <code>Promise&lt;void&gt;</code> | 建立连接并初始化 transport |
+| <code>disconnect()</code> | <code>Promise&lt;void&gt;</code> | 关闭连接并清理接收缓冲区 |
+| <code>getStatus()</code> | <code>Promise&lt;PrinterStatus&gt;</code> | 读取当前状态 |
+| <code>readLabelBox()</code> | <code>Promise&lt;LabelBoxInfo&gt;</code> | 读取耗材盒信息 |
+| <code>print(job)</code> | <code>Promise&lt;void&gt;</code> | 校验、转换并打印整个任务 |
+| <code>stop()</code> | <code>Promise&lt;boolean | void&gt;</code> | 请求停止打印；USB 返回是否已停止，BLE 返回 <code>void</code> |
+
+构造函数会检查 transport 类型：BLE transport 只能配 BLE 后端，USB transport 只能配 USB 后端。没有连接就调用 <code>getStatus()</code>、<code>readLabelBox()</code> 或 <code>print()</code> 会抛出 <code>CommunicationError</code>。
+
+### 直接使用 <code>BlePrinter</code> / <code>UsbPrinter</code>
+
+通常使用 <code>SupvanPrinter</code> 即可。需要访问后端独有的超时配置时，可以直接构造：
+
+~~~ts
+interface BlePrinterOptions {
+  commandTimeoutMs?: number; // 默认 3000 ms
+  printTimeoutMs?: number;   // 默认 120000 ms
+  profile?: PrinterProfile;
+}
+
+interface UsbPrinterOptions {
+  timeoutMs?: number;       // 默认 120000 ms
+  ioTimeoutMs?: number;     // 默认 2000 ms
+  pollIntervalMs?: number;  // 默认 50 ms
+  profile?: PrinterProfile;
+}
+~~~
+
+两者都提供 <code>connected</code>、<code>connect()</code>、<code>disconnect()</code>、<code>getStatus()</code>、<code>readLabelBox()</code> 和 <code>print(job)</code>。<code>BlePrinter.getStatus(timeoutMs?)</code>、<code>BlePrinter.readLabelBox(timeoutMs?)</code> 可单独覆盖本次命令超时；<code>UsbPrinter.stop()</code> 返回布尔值，表示是否在等待窗口内确认停止。
+
+## 传输层
+
+### Web Bluetooth
+
+~~~ts
+interface WebBluetoothOptions {
+  chunkSize?: number;    // 默认 20
+  chunkDelayMs?: number; // 默认 10 ms
+}
+~~~
+
+~~~ts
+const transport = await WebBluetoothTransport.request("T0", {
+  chunkSize: 20,
+  chunkDelayMs: 10,
+});
+~~~
+
+<code>chunkSize</code> 是每次写入 BLE characteristic 的字节数，<code>chunkDelayMs</code> 是连续写入之间的等待时间。设备名称以 <code>namePrefix</code> 开头才会出现在选择框中。类实例还提供：
+
+| 成员 | 说明 |
+| --- | --- |
+| <code>name</code> | 设备名称 |
+| <code>kind</code> | 固定为 <code>"ble"</code> |
+| <code>connected</code> | GATT 连接状态 |
+| <code>connect()</code> / <code>disconnect()</code> | 建立或断开 GATT 连接 |
+| <code>write(data)</code> | 按 BLE 分片写入一段逻辑数据 |
+| <code>read(size = 512, timeoutMs = 2000)</code> | 等待通知并读取最多 <code>size</code> 字节 |
+
+### WebHID
+
+~~~ts
+const transport = await WebHidTransport.request();
+~~~
+
+<code>WebHidTransport.request()</code> 只筛选 SDK 中列出的硕方 T50 USB VID/PID，不接受额外筛选参数。实例的 <code>write()</code> 会按 64 字节 HID report 拆分；T50 输入报告还带一个协议前导字节，transport 会去掉它并消费每份报告的剩余填充。<code>read(size = 512, timeoutMs = 2000)</code> 从 input report 缓冲区读取逻辑数据。
+
+### 微信小程序 BLE
+
+~~~ts
+interface WechatBleOptions {
+  chunkSize?: number;    // 默认 20
+  chunkDelayMs?: number; // 默认 10 ms
+  timeoutMs?: number;    // 默认 10000 ms
+}
+~~~
+
+快速使用：
+
+~~~ts
+import {
+  SupvanPrinter,
+  WechatBleTransport,
+} from "shuofang-t50-sdk/wechat";
+
+const transport = await WechatBleTransport.request("T0", {
+  timeoutMs: 5000,
+  chunkSize: 20,
+  chunkDelayMs: 10,
+});
+const printer = new SupvanPrinter(transport);
+
+await printer.connect();
+await printer.print({
+  pages: [{ width: 320, height: 240, data: new Uint8Array(320 * 240).fill(255) }],
+  settings: { materialWidth: 40, materialHeight: 30, gap: 3 },
+});
+~~~
+
+<code>WechatBleTransport</code> 的静态方法：
+
+| 方法 | 参数 | 说明 |
+| --- | --- | --- |
+| <code>discover(namePrefix = "T0", scanMs = 5000, api?)</code> | 名称前缀、扫描时长、可选 <code>WxBleApi</code> | 扫描并按 RSSI 从强到弱返回 <code>WxBleDevice[]</code> |
+| <code>request(namePrefix = "T0", options?, api?)</code> | 名称前缀、传输选项、可选 <code>WxBleApi</code> | 扫描后选择 RSSI 最强的设备并创建 transport |
+
+<code>timeoutMs</code> 同时用于 <code>request()</code> 的扫描等待时长和连接 API 的超时时间。需要测试或封装自定义微信 API 时才传入第三个 <code>api</code> 参数；真实小程序环境省略即可。
+
+~~~ts
+interface WxBleDevice {
+  deviceId: string;
+  name?: string;
+  localName?: string;
+  RSSI?: number;
+}
+~~~
+
+如果自行实现 <code>WxBleApi</code>，需要提供以下方法：
+
+| 方法 | 用途 |
+| --- | --- |
+| <code>openBluetoothAdapter</code> / <code>closeBluetoothAdapter</code> | 打开或关闭蓝牙适配器 |
+| <code>startBluetoothDevicesDiscovery</code> / <code>stopBluetoothDevicesDiscovery</code> | 开始或停止扫描 |
+| <code>getBluetoothDevices</code> | 获取已发现设备 |
+| <code>onBluetoothDeviceFound</code> / <code>offBluetoothDeviceFound</code> | 监听设备发现 |
+| <code>createBLEConnection</code> / <code>closeBLEConnection</code> | 建立或关闭连接 |
+| <code>getBLEDeviceServices</code> | 获取设备服务 |
+| <code>getBLEDeviceCharacteristics</code> | 获取 characteristic |
+| <code>notifyBLECharacteristicValueChange</code> | 开启或关闭通知 |
+| <code>onBLECharacteristicValueChange</code> / <code>offBLECharacteristicValueChange</code> | 接收通知数据 |
+| <code>writeBLECharacteristicValue</code> | 写入 characteristic |
+
+## DrawObject 页面渲染
+
+### 页面和任务
+
+<code>DrawPage</code> 的坐标和尺寸全部使用毫米；渲染时按 <code>profile.dpi</code> 转换为点。对象数组的顺序就是绘制顺序，后绘制的对象会覆盖前面的对象。
+
+~~~ts
+interface DrawPage {
+  width: number;        // mm
+  height: number;       // mm
+  objects: DrawObject[];
+  repeat?: number;      // 默认 1
+}
+
+interface DrawJob {
+  pages: DrawPage[];
+  settings?: {
+    copies?: number;    // 默认 1，1-99 的整数
+    oneByOne?: boolean; // 默认 true
+  };
+}
+~~~
+
+### <code>DrawObject</code>
+
+所有对象都必须提供 <code>x</code>、<code>y</code>、<code>width</code>、<code>height</code>，单位是毫米。<code>x</code>、<code>y</code> 不能为负，宽高必须大于 <code>0</code>。
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| <code>x</code>, <code>y</code> | 无 | 对象左上角坐标，单位 mm |
+| <code>width</code>, <code>height</code> | 无 | 对象绘制区域，单位 mm |
+| <code>content</code> | <code>""</code> | 文字、二维码或条码内容；优先于 <code>text</code> |
+| <code>text</code> | <code>""</code> | <code>content</code> 的兼容别名 |
+| <code>format</code> | <code>TEXT</code> | 对象类型；优先于 <code>type</code> 和 <code>kind</code> |
+| <code>type</code>, <code>kind</code> | 无 | <code>format</code> 的兼容别名 |
+| <code>fontName</code> | <code>"sans-serif"</code> | Canvas 字体名；也可使用 <code>fontFamily</code> |
+| <code>fontFamily</code> | 无 | <code>fontName</code> 未设置时的字体名 |
+| <code>fontWeight</code> | 普通 | 只有值为 <code>"bold"</code> 时使用粗体 |
+| <code>fontSize</code> | <code>3</code> | 字号，按 mm 转换为打印点 |
+| <code>fontStyle</code> | <code>DrawFontStyle.Normal</code> | 位标志组合，见下表 |
+| <code>align</code> | <code>0</code> / <code>"left"</code> | <code>0</code>/<code>left</code> 左对齐，<code>1</code>/<code>center</code> 居中，<code>2</code>/<code>right</code> 右对齐 |
+| <code>antiColor</code> | <code>false</code> | 反色；文字变为白字黑底，二维码/条码变为白色图案黑底 |
+| <code>autoReturn</code> | <code>false</code> | 按对象宽度自动换行；显式 <code>\n</code> 始终换行 |
+| <code>lineHeight</code> | <code>1.25</code> | 文本行高倍率，最小按 <code>0.5</code> 处理 |
+| <code>rotation</code> | <code>0</code> | 绕对象中心旋转，单位为度；负数会归一化 |
+| <code>fill</code> | 无 | 矩形填充；<code>transparent</code> 表示不填充，热敏输出只保留黑/白 |
+| <code>stroke</code> | <code>"#000000"</code> | 矩形或直线颜色；非白色值会按黑色处理 |
+| <code>strokeWidth</code> | <code>0.35</code> | 矩形边框或直线宽度，单位 mm |
+| <code>image</code> | 无 | <code>IMAGE</code> 对象的图片源；浏览器中应传 <code>CanvasImageSource</code> |
+
+每个 camelCase 字段都可以使用对应的 snake_case 别名，例如 <code>fontSize</code>/<code>font_size</code>、<code>fontStyle</code>/<code>font_style</code>、<code>antiColor</code>/<code>anti_color</code>、<code>autoReturn</code>/<code>auto_return</code> 和 <code>strokeWidth</code>/<code>stroke_width</code>。同一对象同时提供两种写法时，camelCase 优先。
+
+### 对象类型
+
+~~~ts
+enum DrawObjectFormat {
+  Text = "TEXT",
+  Ean13 = "EAN_13",
+  Code128 = "CODE_128",
+  QrCode = "QR_CODE",
+  Image = "IMAGE",
+  Rectangle = "RECTANGLE",
+  Line = "LINE",
+}
+~~~
+
+| 类型 | 内容和行为 |
+| --- | --- |
+| <code>Text</code> | 使用 <code>content</code>/<code>text</code> 绘制文字；默认字体 <code>sans-serif</code>、字号 <code>3</code>、不自动换行 |
+| <code>QrCode</code> | 绘制二维码，内容不能为空；二维码带四个模块的空白区 |
+| <code>Code128</code> | 绘制 Code 128；内容只能包含 ASCII <code>0x20</code> 到 <code>0x7f</code> |
+| <code>Ean13</code> | 绘制 EAN-13；内容必须是 12 位数字，或带正确校验位的 13 位数字 |
+| <code>Image</code> | 把图片缩放到对象区域；字符串 URL 等资源需通过 <code>imageResolver</code> 转成 <code>CanvasImageSource</code> |
+| <code>Rectangle</code> | 使用 <code>fill</code> 填充并使用 <code>stroke</code>/<code>strokeWidth</code> 描边 |
+| <code>Line</code> | 在对象区域垂直居中绘制一条水平线，使用 <code>stroke</code>/<code>strokeWidth</code> |
+
+~~~ts
+enum DrawFontStyle {
+  Normal = 0,
+  Bold = 1,
+  Underline = 4,
+  Strikeout = 8,
+}
+~~~
+
+例如同时加粗和下划线可以使用 <code>DrawFontStyle.Bold | DrawFontStyle.Underline</code>。
+
+### 渲染函数
+
+~~~ts
+interface DrawRenderOptions {
+  imageResolver?: (object: DrawObject) => CanvasImageSource | undefined;
+}
+
+interface DrawRenderTarget {
+  context: DrawCanvasContext;
+  width: number;
+  height: number;
+}
+~~~
+
+| API | 参数和返回值 |
+| --- | --- |
+| <code>drawPageSize(page, profile?)</code> | 将页面毫米尺寸转换为点，返回 <code>{ width, height }</code>；宽度超过 <code>profile.maxWidthDots</code> 时抛出 <code>ValidationError</code>，不会缩放 |
+| <code>drawObject(context, object, profile?, options?)</code> | 在给定 Canvas 2D context 中绘制一个对象 |
+| <code>renderDrawPage(context, page, profile?, options?)</code> | 清空并填充白色背景，然后按顺序绘制页面对象；返回页面点尺寸 |
+| <code>renderDrawJob(job, targetFactory, profile?, options?)</code> | 按 <code>copies</code>/<code>repeat</code>/<code>oneByOne</code> 展开页面；<code>targetFactory(size, page, index)</code> 为每张物理页创建目标，返回目标数组 |
+| <code>normalizeAngle(value)</code> | 将角度归一化到 <code>0</code> 到 <code>&lt;360</code>；非有限数返回 <code>0</code> |
+
+<code>DrawCanvasContext</code> 是浏览器 Canvas 2D context 的最小接口。只要运行时提供 <code>save</code>、<code>restore</code>、变换、路径、文字和图片绘制方法，就可以把 <code>renderDrawPage</code> 接到其他 Canvas 实现。
+
+## 浏览器预览
+
+以下 API 从 <code>shuofang-t50-sdk/browser</code> 导出，结果是实际打印点尺寸的 <code>HTMLCanvasElement</code>：
+
+~~~ts
+interface BrowserPreviewOptions extends DrawRenderOptions {
+  profile?: PrinterProfile;
+  canvas?: HTMLCanvasElement;
+  canvasFactory?: (width: number, height: number) => HTMLCanvasElement;
+  monochrome?: boolean; // 默认 true
+}
+
+interface BrowserObjectPreviewOptions extends BrowserPreviewOptions {
+  pageWidth?: number;
+  pageHeight?: number;
+}
+~~~
+
+| API | 说明 |
+| --- | --- |
+| <code>previewDrawPage(page, options?)</code> | 将一个 <code>DrawPage</code> 渲染到 Canvas；可复用 <code>options.canvas</code> 或通过 <code>canvasFactory</code> 创建 |
+| <code>previewDrawObject(object, options?)</code> | 将一个对象渲染到页面；省略 <code>pageWidth</code>/<code>pageHeight</code> 时使用对象边界 |
+| <code>previewDrawJob(job, options?)</code> | 渲染任务展开后的所有物理页；每页由 <code>canvasFactory</code> 创建 |
+| <code>previewJob</code> | <code>previewDrawJob</code> 的别名 |
+| <code>rasterFromPreviewCanvas(canvas, monochrome = true)</code> | 读取 Canvas 像素并转换为 <code>RasterPage</code>；<code>monochrome</code> 为真时输出黑白 RGBA |
+
+示例：
+
+~~~ts
 import {
   DrawFontStyle,
   DrawObjectFormat,
@@ -82,7 +480,7 @@ const canvases = previewDrawJob({
         format: DrawObjectFormat.Text,
         fontSize: 4,
         fontStyle: DrawFontStyle.Bold,
-        autoReturn: true,
+        align: "center",
       },
       {
         x: 14,
@@ -97,37 +495,293 @@ const canvases = previewDrawJob({
 });
 
 const pages = canvases.map((canvas) => rasterFromPreviewCanvas(canvas));
-```
+~~~
 
-渲染器同时接受 camelCase 和 snake_case 字段，例如 `fontSize`/`font_size`、`autoReturn`/`auto_return`。小程序等其他 Canvas 运行时可以直接调用 `renderDrawPage(context, page)`。
+预览结果可以直接放入 <code>PrintJob</code>：
 
-## 在微信小程序中打印
+~~~ts
+await printer.print({ pages });
+~~~
 
-```js
-const { SupvanPrinter, WechatBleTransport } = require("shuofang-t50-sdk/wechat");
+## 栅格和热敏处理
 
-const printer = new SupvanPrinter(await WechatBleTransport.request("T0", {
-  timeoutMs: 5000,
-  chunkSize: 20,
-  chunkDelayMs: 10,
-}));
-await printer.connect();
-```
+这些函数从通用入口导出，适合在调用打印机前准备图像：
 
-## T50 的限制
+| API | 参数和行为 |
+| --- | --- |
+| <code>toGrayscale(page)</code> | 将灰度或 RGBA <code>RasterPage</code> 转为 <code>{ width, height, data: Uint8Array }</code>；RGBA 使用亮度和 alpha 合成到白底 |
+| <code>createGrayRaster(width, height, fill = 255)</code> | 创建灰度图；<code>fill</code> 是初始灰度值 |
+| <code>resizeRaster(source, width, height)</code> | 使用双线性插值缩放灰度图 |
+| <code>rotateRaster(source, clockwiseQuarterTurns)</code> | 按顺时针 90 度倍数旋转；负数和大于 <code>4</code> 的值会按模 4 处理 |
+| <code>pasteRaster(target, source, left, top)</code> | 将源图复制到目标图；超出目标边界的部分会裁剪 |
+| <code>mirrorRaster(source)</code> | 水平镜像并返回新灰度图 |
+| <code>rasterFromImageData(image)</code> | 将 <code>{ width, height, data }</code> 包装为 <code>RasterPage</code>，不复制像素 |
+| <code>toThermalPixels(data, threshold = 190)</code> | 将 RGBA 转为不透明黑白 RGBA；透明度小于 <code>16</code> 或亮度大于等于阈值的像素变为白色 |
 
-BLE 图像使用 LZMA-Alone，参数固定为 properties `0x5D`、字典 `8192` 字节、BT4、nice length `128`，并启用 end marker。默认型号配置为 `8` 点/mm（约 `203 DPI`），最大打印宽度为 `384` 点；超宽页面会抛出 `ValidationError`，不会自动缩放。
+<code>GrayRaster</code> 的 <code>data</code> 是每像素一个字节，<code>0</code> 为黑，<code>255</code> 为白。<code>RgbaImageData</code> 的 <code>data</code> 可以是 <code>Uint8Array</code> 或 <code>Uint8ClampedArray</code>。
 
-LZMA 的字节级回归测试以 [supvan-t50-python-sdk](https://github.com/Zbuter/supvan-t50-python-sdk) 的实现为外部参考；该 Python 项目不在本仓库内。协议细节见 [docs/PROTOCOL.md](docs/PROTOCOL.md)。
+## 型号配置
 
-## 构建和发布
+~~~ts
+interface PrinterProfile {
+  id: string;
+  name: string;
+  dpi: number;
+  physicalDpi: number;
+  maxWidthDots: number;
+}
+~~~
+
+SDK 自带的 <code>SUPVAN_T50_PROFILE</code>：
+
+| 字段 | 值 | 含义 |
+| --- | --- | --- |
+| <code>id</code> | <code>"t50"</code> | 型号标识 |
+| <code>name</code> | <code>"T50 · 203 DPI"</code> | 显示名称 |
+| <code>dpi</code> | <code>8</code> | 协议点密度，8 点/mm |
+| <code>physicalDpi</code> | <code>203</code> | 人类可读的物理 DPI |
+| <code>maxWidthDots</code> | <code>384</code> | 最大打印宽度 |
+
+<code>dotsForMm(value, profile?)</code> 将正的毫米尺寸转换为点并四舍五入，最小返回 <code>1</code>。自定义 profile 可传给 <code>SupvanPrinterOptions.profile</code>、<code>drawPageSize</code>、<code>renderDrawPage</code>、<code>renderDrawJob</code> 和预览选项；当前 <code>PrintSettings.maxDotValue</code> 的校验上限仍是 <code>384</code>。
+
+## 打印状态和耗材信息
+
+### <code>PrinterState</code>
+
+| 枚举 | 值 | 含义 |
+| --- | ---: | --- |
+| <code>Ready</code> | <code>0</code> | 准备就绪 |
+| <code>HeadOverheat</code> | <code>1</code> | 打印头温度过高 |
+| <code>CoverOpen</code> | <code>2</code> | 上盖未关好 |
+| <code>MediaNotInstalled</code> | <code>3</code> | 耗材未装好 |
+| <code>MediaLow</code> | <code>4</code> | 耗材余量不足 |
+| <code>MediaNotDetected</code> | <code>5</code> | 未检测到耗材 |
+| <code>MediaUnrecognized</code> | <code>6</code> | 未识别到耗材 |
+| <code>MediaEmpty</code> | <code>7</code> | 耗材已用完 |
+| <code>BatteryLow</code> | <code>8</code> | 电池电压低 |
+| <code>CommunicationError</code> | <code>9</code> | 通信异常 |
+
+### <code>PrinterStatus</code>
+
+| 字段 | 说明 |
+| --- | --- |
+| <code>state</code> | <code>PrinterState</code> 枚举值 |
+| <code>description</code> | 状态中文描述；就绪但正在打印时为“打印中” |
+| <code>errorMessage</code> | 非就绪状态对应的错误描述；就绪时为空字符串 |
+| <code>printedPages</code> | 已打印页数 |
+| <code>totalPages</code> | 任务总页数；BLE 状态通常为 <code>0</code> |
+| <code>temperatureC</code> | BLE 状态中的打印头温度，单位 °C；USB 可能没有 |
+| <code>voltageV</code> | BLE 状态中的电压，单位 V；USB 可能没有 |
+| <code>raw</code> | 原始状态响应 |
+| <code>rawFlags</code> | 原始状态标志字节 |
+| <code>ready</code> | <code>true</code> 表示状态为 <code>Ready</code>、没有设备错误、不忙、不打印且没有第二设备占用 |
+| <code>busy</code> / <code>printing</code> | 设备是否忙或正在打印 |
+| <code>bufferFull</code> | 打印缓冲区是否已满 |
+| <code>headOverheat</code> | 打印头是否过热 |
+| <code>coverOpen</code> | 上盖是否打开 |
+| <code>labelNotInstalled</code> / <code>mediaNotInstalled</code> | 耗材是否未安装 |
+| <code>mediaNotDetected</code> / <code>labelReadWriteError</code> | 是否未检测到耗材或耗材读写错误 |
+| <code>mediaEmpty</code> / <code>mediaLow</code> / <code>mediaUnrecognized</code> | 耗材状态标志 |
+| <code>batteryLow</code> / <code>charging</code> | 电池电量低或正在充电 |
+| <code>usbInserted</code> | USB 是否插入 |
+| <code>secondDeviceBusy</code> | 是否有第二设备占用 |
+
+### <code>LabelBoxInfo</code>
+
+| 字段 | 说明 |
+| --- | --- |
+| <code>uuidHex</code> | 耗材 UUID 的大写十六进制字符串 |
+| <code>codeHex</code> | 耗材编码的大写十六进制字符串 |
+| <code>serialNumber</code> | 耗材序列号 |
+| <code>typeCode</code> | 耗材类型编码 |
+| <code>rawHeight</code> | 响应中的原始高度值 |
+| <code>height</code> | SDK 使用的高度值 |
+| <code>width</code> | 耗材宽度，单位 mm |
+| <code>rawGap</code> | 响应中的原始间隙值 |
+| <code>gap</code> | SDK 使用的间隙值，单位 mm |
+| <code>remaining</code> | 剩余数量 |
+| <code>template5mm</code> / <code>template40mm</code> | 耗材响应中的模板字段 |
+| <code>timestampDigits</code> | 响应中的时间数字串 |
+| <code>raw</code> | 原始耗材响应 |
+
+## 运行时能力
+
+~~~ts
+interface RuntimeCapabilities {
+  secureContext: boolean;
+  webBluetooth: boolean;
+  webHid: boolean;
+  wechatBle: boolean;
+}
+
+const capabilities = detectCapabilities();
+~~~
+
+<code>webBluetooth</code> 和 <code>webHid</code> 只有在安全上下文且浏览器提供对应 API 时为真；<code>wechatBle</code> 根据全局 <code>wx</code> 是否存在判断。能力检测不会请求权限，也不会连接设备。
+
+## 协议和压缩 API
+
+下面的函数属于高级 API。普通应用应使用 <code>SupvanPrinter</code>；只有需要自定义 transport、抓取协议帧或实现其他运行时适配时才需要直接调用。
+
+### BLE 协议
+
+| API | 参数和返回值 |
+| --- | --- |
+| <code>buildR1(command, value = 0)</code> | 构造单值 BLE 控制帧；<code>command</code> 是 8 位命令，<code>value</code> 是 16 位值 |
+| <code>buildR2(command, transferSize, packetCount)</code> | 构造批量传输控制帧；传输大小和分包数都是 16 位值 |
+| <code>buildDataQuery(command, data)</code> | 构造带数据的 BLE 请求帧 |
+| <code>parseBleResponse(frame, expectedCommand?)</code> | 校验帧头、声明长度、校验和和可选命令号；返回原始帧 |
+| <code>parseBleStatus(frame)</code> | 校验 <code>0x11</code> 状态响应并返回 <code>PrinterStatus</code> |
+| <code>parseLabelBoxData(data)</code> | 从耗材响应数据解析 <code>LabelBoxInfo</code> |
+| <code>parseBleLabelBox(frame)</code> | 校验 <code>0x30</code> BLE 响应并解析耗材信息 |
+| <code>makeParameterBlock(settings)</code> | 根据完整设置生成 BLE 耗材参数块 |
+| <code>prepareBleRaster(page, settings)</code> | 将输入转换为中间灰度图，执行旋转、居中和偏移；后续会按阈值打包为黑白 BLE 点阵 |
+| <code>bleImageFrames(page, settings, jobLastPage = false)</code> | 生成固定 <code>4096</code> 字节的 BLE 图像帧；最后一页标志由 <code>jobLastPage</code> 控制 |
+| <code>compressedBleBatches(frames, maxFrames = 4)</code> | 将图像帧按批次使用 T50 LZMA 压缩；返回 <code>frameCount</code>、<code>data</code> 和估算 <code>speed</code> |
+| <code>buildPrintBulkPacket(packetIndex, packetCount, data)</code> | 生成 506 字节内层分包；<code>data</code> 最多 500 字节 |
+| <code>buildBulkOuter512(inner)</code> | 将 506 字节内层分包包装成 512 字节外层分包 |
+| <code>bulkPackets(data)</code> | 按 500 字节拆分压缩数据并生成 512 字节外层分包；分包总数不能超过 255 |
+
+### USB 协议
+
+| API | 参数和返回值 |
+| --- | --- |
+| <code>buildVendorRequest(command, value1 = 0, value2?)</code> | 构造 USB vendor request；<code>command</code> 为 8 位，数值参数为 16 位 |
+| <code>buildMediaConfig(settings)</code> | 根据耗材设置生成 USB 媒介配置块 |
+| <code>parseUsbStatus(data, totalPages = 0)</code> | 解析至少 8 字节的 USB 状态，并填充总页数 |
+| <code>prepareUsbRaster(page, settings)</code> | 将输入转换为中间灰度图，按 <code>direction</code> 旋转、居中、偏移并水平镜像；后续会按阈值打包为黑白 USB 点阵 |
+| <code>usbImageFrames(page, settings, lastJobPage = false, threshold = 190)</code> | 按行打包 USB 图像帧；<code>threshold</code> 控制灰度转黑点的阈值 |
+| <code>selectUsbTransferBlock(frames, maxFrames = 8, maxSize = 4096)</code> | 从帧列表前部选择一个压缩后不超过 <code>maxSize</code> 的传输块 |
+| <code>hidReports(payload)</code> | 按 64 字节切分 HID payload，并追加驱动需要的尾部空 report |
+
+### LZMA
+
+<code>SUPVAN_LZMA_OPTIONS</code> 是只读配置：
+
+| 参数 | 值 | 作用 |
+| --- | --- | --- |
+| <code>a</code> | <code>2</code> | 压缩模式 |
+| <code>d</code> | <code>13</code> | 字典参数 |
+| <code>fb</code> | <code>128</code> | nice length |
+| <code>mf</code> | <code>"bt4"</code> | 匹配查找器 |
+| <code>lc</code> | <code>3</code> | literal context bits |
+| <code>lp</code> | <code>0</code> | literal position bits |
+| <code>pb</code> | <code>2</code> | position bits |
+| <code>eos</code> | <code>true</code> | 写入 end marker |
+
+| API | 说明 |
+| --- | --- |
+| <code>lzmaCompress(source)</code> | 压缩一段数据，并校验输出为 T50 兼容的 LZMA-Alone 格式 |
+| <code>lzmaCompressFrames(frames)</code> | 先拼接多帧，再调用 <code>lzmaCompress</code> |
+| <code>inspectLzmaHeader(data)</code> | 读取 properties、字典大小和未压缩大小 |
+| <code>assertSupvanLzmaHeader(data)</code> | 要求 properties 为 <code>0x5D</code>、字典为 <code>8192</code> 字节，否则抛出 <code>ValidationError</code> |
+
+## 通用 transport 接口
+
+如果要接入 SDK 没有内置的运行时，实现下面的接口即可交给 <code>SupvanPrinter</code>：
+
+~~~ts
+type TransportKind = "ble" | "usb";
+
+interface PrinterTransport {
+  readonly kind: TransportKind;
+  readonly name: string;
+  readonly connected: boolean;
+  readonly bulkAckRequired?: boolean;
+  readonly bulkAckOptional?: boolean;
+  readonly separatePhysicalPages?: boolean;
+  readonly printCompletionOnSubmit?: boolean;
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
+  write(data: Uint8Array): Promise<void>;
+  read(size?: number, timeoutMs?: number): Promise<Uint8Array>;
+}
+~~~
+
+可选标志的用途：
+
+- <code>bulkAckRequired</code>：批量 BLE 分包后是否必须等待每个确认帧。
+- <code>separatePhysicalPages</code>：是否逐物理页提交多页任务；内置 BLE transport 为 <code>true</code>。
+- <code>printCompletionOnSubmit</code>：提交数据后是否可以直接认为打印完成。
+
+<code>writeChunked(write, data, chunkSize, delayMs = 0)</code> 可把任意数据按指定大小分片写入。<code>AsyncByteQueue</code> 提供 <code>push(data)</code>、<code>clear()</code> 和 <code>read(size = 512, timeoutMs = 2000)</code>，用于把异步通知缓冲成 transport 的读取接口。
+
+## 常量
+
+| 常量 | 值/含义 |
+| --- | --- |
+| <code>FRAME_SIZE</code> | <code>4096</code>，逻辑图像帧大小 |
+| <code>PRINT_WIDTH_DOTS</code> | <code>384</code> |
+| <code>DOTS_PER_MM</code> | <code>8</code> |
+| <code>BYTES_PER_LINE</code> | <code>48</code> |
+| <code>FRAME_HEADER_SIZE</code> | <code>14</code> |
+| <code>BLE_MAX_LINES_PER_FRAME</code> | <code>85</code> |
+| <code>USB_FRAME_DATA_SIZE</code> | <code>4074</code> |
+| <code>HID_REPORT_SIZE</code> | <code>64</code> |
+| <code>SUPVAN_VENDOR_ID</code> | <code>0x1820</code> |
+| <code>T50_PRODUCT_IDS</code> | <code>0x2072</code>、<code>0x2073</code>、<code>0x2074</code>、<code>0x2076</code>、<code>0x2077</code>、<code>0x207d</code>、<code>0x207f</code>、<code>0x2170</code> |
+| <code>LZMA_ALONE_HEADER</code> | <code>[0x5d, 0x00, 0x20, 0x00, 0x00]</code> |
+| <code>LZMA_DICTIONARY_SIZE</code> | <code>8192</code> |
+
+BLE UUID：
+
+| 名称 | UUID |
+| --- | --- |
+| <code>BLE_UUIDS.service</code> | <code>0000e0ff-3c17-d293-8e48-14fe2e4da212</code> |
+| <code>BLE_UUIDS.write</code> | <code>0000ffe9-0000-1000-8000-00805f9b34fb</code> |
+| <code>BLE_UUIDS.notify</code> | <code>0000ffe1-0000-1000-8000-00805f9b34fb</code> |
+| <code>BLE_UUIDS.bulkNotify</code> | <code>0000ffea-0000-1000-8000-00805f9b34fb</code> |
+
+USB 命令常量：
+
+| 名称 | 值 |
+| --- | ---: |
+| <code>USB_COMMANDS.bufferFull</code> | <code>0x10</code> |
+| <code>USB_COMMANDS.inquiryStatus</code> | <code>0x11</code> |
+| <code>USB_COMMANDS.checkDevice</code> | <code>0x12</code> |
+| <code>USB_COMMANDS.startPrint</code> | <code>0x13</code> |
+| <code>USB_COMMANDS.stopPrint</code> | <code>0x14</code> |
+| <code>USB_COMMANDS.returnMaterial</code> | <code>0x30</code> |
+| <code>USB_COMMANDS.transferData</code> | <code>0x5c</code> |
+| <code>USB_COMMANDS.setMedia</code> | <code>0x5d</code> |
+
+## 错误类型
+
+| 类型 | 常见原因 |
+| --- | --- |
+| <code>SupvanError</code> | 所有 SDK 错误的基类 |
+| <code>ValidationError</code> | 参数范围、页面尺寸、像素长度、帧格式不符合要求 |
+| <code>CapabilityError</code> | 当前环境没有 Web Bluetooth、WebHID 或微信 BLE 能力，或没有选择设备 |
+| <code>CommunicationError</code> | 未连接、读写失败、响应长度/校验和错误、打印超时 |
+| <code>TimeoutError</code> | <code>CommunicationError</code> 的子类，等待设备数据超时 |
+| <code>DeviceError</code> | 打印机报告上盖、耗材、电池、温度或其他设备状态错误 |
+
+建议在一次打印任务外层统一处理这些错误，并在 <code>DeviceError</code> 时先读取 <code>getStatus()</code>；不要把 <code>ValidationError</code> 当成设备故障重试。
+
+## 已知行为
+
+- T50 默认 profile 使用 <code>8</code> 点/mm、物理约 <code>203 DPI</code>、最大宽度 <code>384</code> 点。
+- 页面和图像不会自动缩放。需要缩放时先使用 <code>resizeRaster</code>，或在生成 <code>DrawPage</code> 时调整毫米尺寸。
+- <code>PrintSettings.dpi</code> 表示协议点密度，即点/mm；它不是浏览器屏幕分辨率，也不是 <code>physicalDpi</code>。
+- BLE 和 USB 的方向字段不同：BLE 使用 <code>rotate</code>，USB 使用 <code>direction</code>。
+- <code>DrawObject</code> 的文字、二维码、条码、矩形和直线最终都会变成黑白热敏输出；彩色 <code>fill</code>/<code>stroke</code> 不会保留彩色。
+- 浏览器 transport 依赖安全上下文；微信 transport 依赖运行时存在 <code>wx</code> BLE API。
+
+## 开发验证
 
 在 SDK 目录执行：
 
-```bash
+~~~bash
+npm run typecheck
+npm test
 npm run build
 npm run pack:check
-npm publish --access public
-```
+~~~
 
-发布前先更新版本号，并确认 `npm pack --dry-run` 的内容符合预期。
+<code>npm run build</code> 会先执行类型检查和测试，再生成发布文件。发布前确认版本号和 <code>npm pack --dry-run</code> 内容，然后执行：
+
+~~~bash
+npm publish --access public
+~~~
+
+协议帧和图像处理的补充说明见 [docs/PROTOCOL.md](docs/PROTOCOL.md)。

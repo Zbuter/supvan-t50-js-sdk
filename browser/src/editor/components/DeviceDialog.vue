@@ -28,9 +28,11 @@ const emit = defineEmits<{
           <h2 id="device-title">打印机连接</h2>
           <p v-if="connected"><Check :size="15" />{{ deviceName }}</p>
         </div>
-        <button class="icon-button" type="button" title="关闭" @click="emit('close')">
-          <X :size="18" />
-        </button>
+        <div class="dialog-actions">
+          <button class="icon-button" type="button" title="关闭" :disabled="busy" @click="emit('close')">
+            <X :size="18" />
+          </button>
+        </div>
       </header>
 
       <div class="device-methods">

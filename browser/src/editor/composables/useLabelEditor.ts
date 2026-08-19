@@ -14,6 +14,7 @@ import {
   EDITOR_DOTS_PER_MM,
   LABEL_SIZE_LIMITS,
   MAX_AUTO_FIT_ZOOM,
+  SNAP_SETTLE_DELAY_MS,
   THERMAL_BLACK,
 } from "../constants";
 import { alignSelection, type CanvasBounds } from "../services/alignment";
@@ -121,6 +122,8 @@ export function useLabelEditor() {
   let pageLoading = false;
   let pageSaveScheduled = false;
   let selectionUpdateFrame: number | undefined;
+  let snapTimer: ReturnType<typeof setTimeout> | undefined;
+  let pendingSnapTarget: FabricObject | undefined;
   let longPressTimer: ReturnType<typeof setTimeout> | undefined;
   const disposers: VoidFunction[] = [];
 
@@ -146,7 +149,8 @@ export function useLabelEditor() {
     if (page) page.snapshot = canvasSnapshot();
   }
 
-  function schedulePageSave(): void {
+  function schedulePageSave(event?: { target?: FabricObject }): void {
+    if (event?.target && getEditorData(event.target)?.kind === "guide") return;
     if (pageLoading || pageSaveScheduled) return;
     pageSaveScheduled = true;
     queueMicrotask(() => {
@@ -162,7 +166,7 @@ export function useLabelEditor() {
     history = new EditorHistory(current, (state) => {
       canUndo.value = state.canUndo;
       canRedo.value = state.canRedo;
-    });
+    }, 60, (event) => getEditorData(event.target)?.kind !== "guide");
     history.capture();
   }
 
@@ -307,6 +311,31 @@ export function useLabelEditor() {
       selectionUpdateFrame = undefined;
       updateSelection();
     });
+  }
+
+  function scheduleSnap(target: FabricObject): void {
+    pendingSnapTarget = target;
+    if (snapTimer) clearTimeout(snapTimer);
+    snapTimer = setTimeout(() => {
+      snapTimer = undefined;
+      const pending = pendingSnapTarget;
+      pendingSnapTarget = undefined;
+      if (pending) snapGuides?.snap(pending);
+    }, SNAP_SETTLE_DELAY_MS);
+  }
+
+  function flushSnap(): void {
+    if (snapTimer) clearTimeout(snapTimer);
+    snapTimer = undefined;
+    const pending = pendingSnapTarget;
+    pendingSnapTarget = undefined;
+    if (pending) snapGuides?.snap(pending);
+  }
+
+  function cancelPendingSnap(): void {
+    if (snapTimer) clearTimeout(snapTimer);
+    snapTimer = undefined;
+    pendingSnapTarget = undefined;
   }
 
   async function addObject(kind: Exclude<EditorObjectKind, "image" | "guide">): Promise<void> {
@@ -692,7 +721,7 @@ export function useLabelEditor() {
       current.on("object:scaling", refresh),
       current.on("object:rotating", refresh),
       current.on("object:moving", ({ target }) => {
-        if (target) snapGuides?.snap(target);
+        if (target) scheduleSnap(target);
         scheduleSelectionUpdate();
       }),
       current.on("object:modified", ({ target }) => {
@@ -703,8 +732,12 @@ export function useLabelEditor() {
         snapGuides?.clear();
         updateSelection();
       }),
+      current.on("mouse:up:before", () => {
+        flushSnap();
+      }),
       current.on("mouse:up", () => {
         cancelLongPress();
+        cancelPendingSnap();
         snapGuides?.clear(false);
       }),
       current.on("mouse:move", cancelLongPress),
@@ -755,6 +788,7 @@ export function useLabelEditor() {
     window.removeEventListener("keydown", handleKeyboard);
     if (selectionUpdateFrame !== undefined) cancelAnimationFrame(selectionUpdateFrame);
     selectionUpdateFrame = undefined;
+    cancelPendingSnap();
     if (longPressTimer) clearTimeout(longPressTimer);
     longPressTimer = undefined;
     disposers.splice(0).forEach((disposeEvent) => disposeEvent());

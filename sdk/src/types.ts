@@ -99,7 +99,10 @@ export interface PrinterStatus {
   temperatureC?: number;
   voltageV?: number;
   bufferFull: boolean;
+  headOverheat: boolean;
   labelReadWriteError: boolean;
+  mediaNotDetected: boolean;
+  mediaLow: boolean;
   mediaEmpty: boolean;
   mediaUnrecognized: boolean;
   mediaNotInstalled: boolean;
