@@ -26,6 +26,8 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 700,
-    sourcemap: true,
+    // Pages' bundle guard scans generated files; source maps would include
+    // the dependency's original AMD wrapper text and trigger a false alarm.
+    sourcemap: false,
   },
 });
