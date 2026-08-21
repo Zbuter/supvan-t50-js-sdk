@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  PaperType,
   bleImageFrames,
   buildBulkOuter512,
   buildPrintBulkPacket,
@@ -9,9 +8,10 @@ import {
   buildR2,
   bulkPackets,
   parseBleLabelBox,
-  resolvePrintSettings,
-} from "../src";
-import { toHex } from "../src/utils/bytes";
+  prepareBleRaster,
+} from "../src/protocol";
+import { PaperType, resolvePrintSettings } from "../src";
+import { toHex } from "../src/internal";
 
 describe("BLE protocol", () => {
   it("builds verified R1 and R2 control layouts", () => {
@@ -58,16 +58,47 @@ describe("BLE protocol", () => {
   });
 
   it("accepts 50 mm media while rejecting wider material", () => {
-    expect(resolvePrintSettings({ materialWidth: 50 }).materialWidth).toBe(50);
+    const settings = resolvePrintSettings({ materialWidth: 50, dotsPerMm: 8 });
+    expect(settings.materialWidth).toBe(50);
+    expect(settings.maxWidthDots).toBe(400);
+    expect(
+      resolvePrintSettings({ materialWidth: 50, dotsPerMm: 8, maxDotValue: 400 }).maxWidthDots,
+    ).toBe(400);
+    expect(
+      () => resolvePrintSettings({ materialWidth: 50, dotsPerMm: 8, maxDotValue: 401 }),
+    ).toThrow("当前页面宽度");
     expect(() => resolvePrintSettings({ materialWidth: 51 })).toThrow("1-50 范围内");
+  });
+
+  it("uses the shared direction field and preserves the legacy BLE alias", () => {
+    const common = resolvePrintSettings({ direction: 3, materialWidth: 1, materialHeight: 1, dpi: 8 });
+    const legacy = resolvePrintSettings({ rotate: 1, materialWidth: 1, materialHeight: 1, dpi: 8 });
+    const page = { width: 2, height: 1, data: Uint8Array.of(0, 255) };
+    expect(common.direction).toBe(3);
+    expect(legacy.direction).toBe(3);
+    expect(prepareBleRaster(page, common)).toEqual(prepareBleRaster(page, legacy));
+    expect(() => resolvePrintSettings({ direction: 0, rotate: 1 })).toThrow("不一致");
+  });
+
+  it("normalizes canonical geometry names and rejects conflicting aliases", () => {
+    const settings = resolvePrintSettings({
+      materialWidth: 40,
+      materialHeight: 1,
+      dotsPerMm: 8,
+      maxWidthDots: 320,
+    });
+    expect(settings.dotsPerMm).toBe(8);
+    expect(settings.maxWidthDots).toBe(320);
+    expect(() => resolvePrintSettings({ dotsPerMm: 8, dpi: 9 })).toThrow("不一致");
+    expect(() => resolvePrintSettings({ maxWidthDots: 320, maxDotValue: 384 })).toThrow("不一致");
   });
 
   it("rejects source pixels wider than the model instead of scaling them", () => {
     const settings = resolvePrintSettings({ materialWidth: 50, materialHeight: 30, dpi: 8 });
     expect(() => bleImageFrames({
-      width: 400,
+      width: 401,
       height: 240,
-      data: new Uint8Array(400 * 240),
+      data: new Uint8Array(401 * 240),
     }, settings)).toThrow("不会自动缩放");
   });
 

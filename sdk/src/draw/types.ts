@@ -1,4 +1,5 @@
 import type { RasterPage } from "../types";
+import type { PageJob, PageJobSettings } from "../jobs";
 
 /** Formats understood by the shared draw-object renderer. */
 export enum DrawObjectFormat {
@@ -18,47 +19,69 @@ export enum DrawFontStyle {
   Strikeout = 8,
 }
 
-/**
- * A physical label object. Coordinates and dimensions are millimeters.
- *
- * The snake_case aliases intentionally mirror the Python SDK so a document
- * can be shared between the two runtimes without a lossy conversion step.
- */
-export interface DrawObject {
+export type DrawAlign = "left" | "center" | "right";
+
+export interface DrawObjectBase {
   x: number;
   y: number;
   width: number;
   height: number;
-  content?: string;
-  format?: DrawObjectFormat | string;
-  type?: DrawObjectFormat | string;
-  kind?: DrawObjectFormat | string;
-  text?: string;
-  fontName?: string;
-  font_name?: string;
-  fontFamily?: string;
-  font_family?: string;
-  fontWeight?: string;
-  font_weight?: string;
-  fontSize?: number;
-  font_size?: number;
-  fontStyle?: DrawFontStyle | number;
-  font_style?: DrawFontStyle | number;
-  align?: 0 | 1 | 2 | "left" | "center" | "right";
-  antiColor?: boolean;
-  anti_color?: boolean;
-  autoReturn?: boolean;
-  auto_return?: boolean;
-  lineHeight?: number;
-  line_height?: number;
   rotation?: number;
+}
+
+export interface TextObject extends DrawObjectBase {
+  format: DrawObjectFormat.Text;
+  content: string;
+  fontFamily?: string;
+  fontWeight?: string;
+  fontSize?: number;
+  fontStyle?: DrawFontStyle | number;
+  align?: DrawAlign;
+  antiColor?: boolean;
+  autoReturn?: boolean;
+  lineHeight?: number;
+}
+
+export interface QrCodeObject extends DrawObjectBase {
+  format: DrawObjectFormat.QrCode;
+  content: string;
+  antiColor?: boolean;
+}
+
+export interface BarcodeObject extends DrawObjectBase {
+  format: DrawObjectFormat.Code128 | DrawObjectFormat.Ean13;
+  content: string;
+  antiColor?: boolean;
+}
+
+export interface ImageObject extends DrawObjectBase {
+  format: DrawObjectFormat.Image;
+  image: CanvasImageSource | string | RasterPage;
+  resourceId?: string;
+  symbolId?: string;
+}
+
+export interface RectangleObject extends DrawObjectBase {
+  format: DrawObjectFormat.Rectangle;
   fill?: string;
   stroke?: string;
   strokeWidth?: number;
-  stroke_width?: number;
-  /** A browser ImageBitmap/HTMLImageElement or a platform image source. */
-  image?: CanvasImageSource | string | RasterPage;
 }
+
+export interface LineObject extends DrawObjectBase {
+  format: DrawObjectFormat.Line;
+  stroke?: string;
+  strokeWidth?: number;
+}
+
+/** Canonical object model consumed by the renderer. */
+export type DrawObject =
+  | TextObject
+  | QrCodeObject
+  | BarcodeObject
+  | ImageObject
+  | RectangleObject
+  | LineObject;
 
 export interface DrawPage {
   width: number;
@@ -67,11 +90,4 @@ export interface DrawPage {
   repeat?: number;
 }
 
-export interface DrawJob {
-  pages: DrawPage[];
-  /** Only copies and print order are consumed by the renderer. */
-  settings?: {
-    copies?: number;
-    oneByOne?: boolean;
-  };
-}
+export type DrawJob = PageJob<DrawPage, PageJobSettings>;

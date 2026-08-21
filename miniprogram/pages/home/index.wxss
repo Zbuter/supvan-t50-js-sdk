@@ -1,0 +1,74 @@
+.home-page {
+  padding-top: 48rpx;
+}
+
+.hero {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  margin-bottom: 34rpx;
+}
+
+.brand-mark {
+  display: flex;
+  width: 76rpx;
+  height: 76rpx;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20rpx;
+  color: #ffffff;
+  background: #17211b;
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.title {
+  margin-bottom: 6rpx;
+  font-size: 38rpx;
+  font-weight: 700;
+}
+
+.intro-card button {
+  margin-top: 18rpx;
+}
+
+.section-title {
+  margin-bottom: 14rpx;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.description {
+  line-height: 1.6;
+}
+
+.error-message {
+  margin-top: 18rpx;
+  padding: 16rpx;
+  border-radius: 10rpx;
+  color: #a43a32;
+  background: #fff0ee;
+  font-size: 24rpx;
+}
+
+.recent-section {
+  margin-top: 38rpx;
+}
+
+.recent-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14rpx;
+}
+
+.recent-name {
+  margin-bottom: 5rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.recent-arrow {
+  color: #13795b;
+  font-size: 44rpx;
+}

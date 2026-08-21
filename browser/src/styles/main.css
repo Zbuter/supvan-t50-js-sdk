@@ -863,7 +863,8 @@ textarea:focus-visible {
 }
 
 .device-dialog,
-.print-dialog {
+.print-dialog,
+.template-dialog {
   width: min(440px, 100%);
   max-height: min(620px, calc(100dvh - 40px));
   overflow: auto;
@@ -877,8 +878,14 @@ textarea:focus-visible {
   width: min(480px, 100%);
 }
 
+.template-dialog {
+  width: min(720px, 100%);
+  max-height: min(700px, calc(100dvh - 40px));
+}
+
 .device-dialog > header,
-.print-dialog > header {
+.print-dialog > header,
+.template-dialog > header {
   display: flex;
   min-height: 66px;
   align-items: center;
@@ -888,13 +895,15 @@ textarea:focus-visible {
 }
 
 .device-dialog h2,
-.print-dialog h2 {
+.print-dialog h2,
+.template-dialog h2 {
   margin: 0;
   font-size: 16px;
 }
 
 .device-dialog header p,
-.print-dialog header p {
+.print-dialog header p,
+.template-dialog header p {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -1128,7 +1137,8 @@ textarea:focus-visible {
 }
 
 .device-dialog > footer,
-.print-dialog > footer {
+.print-dialog > footer,
+.template-dialog > footer {
   display: flex;
   min-height: 58px;
   align-items: center;
@@ -1137,6 +1147,62 @@ textarea:focus-visible {
   padding: 10px 16px;
   border-top: 1px solid var(--line);
   background: var(--surface-soft);
+}
+
+.template-dialog header p {
+  color: var(--muted);
+}
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  padding: 16px;
+}
+
+.template-card {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-soft);
+}
+
+.template-card__preview {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  color: var(--accent-strong);
+  background: #fff;
+}
+
+.template-card__content {
+  min-width: 0;
+}
+
+.template-card__content strong,
+.template-card__content small {
+  display: block;
+}
+
+.template-card__content strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.template-card__content small,
+.template-card__content p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
 }
 
 .busy-label {

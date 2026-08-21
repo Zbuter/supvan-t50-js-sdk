@@ -12,7 +12,7 @@ export const SUPVAN_LZMA_OPTIONS = Object.freeze({
   lc: 3,
   lp: 0,
   pb: 2,
-  // Python/liblzma emits the end marker even though LZMA-Alone carries a size.
+  // Keep the end marker because the T50 decoder expects the reference stream shape.
   eos: true,
 });
 

@@ -1,4 +1,4 @@
-import type { PrinterProfile } from "./protocol/profile";
+import type { PrinterProfileInput } from "./protocol/profile";
 import { SUPVAN_T50_PROFILE } from "./protocol/profile";
 import { toThermalPixels } from "./raster/thermal";
 import type { RasterPage } from "./types";
@@ -6,7 +6,7 @@ import type { DrawObject } from "./draw/types";
 import { drawPageSize, renderDrawJob, renderDrawPage, type DrawJob, type DrawPage, type DrawRenderOptions, type DrawRenderTarget } from "./draw/renderer";
 
 export interface BrowserPreviewOptions extends DrawRenderOptions {
-  profile?: PrinterProfile;
+  profile?: PrinterProfileInput;
   canvas?: HTMLCanvasElement;
   canvasFactory?: (width: number, height: number) => HTMLCanvasElement;
   monochrome?: boolean;
@@ -55,7 +55,7 @@ export function previewDrawJob(job: DrawJob, options: BrowserPreviewOptions = {}
   });
 }
 
-/** Alias matching the Python SDK's preview_job naming. */
+/** @deprecated Use previewDrawJob. */
 export const previewJob = previewDrawJob;
 
 export function rasterFromPreviewCanvas(canvas: HTMLCanvasElement, monochrome = true): RasterPage {
@@ -67,7 +67,7 @@ export function rasterFromPreviewCanvas(canvas: HTMLCanvasElement, monochrome = 
 }
 
 function createCanvas(width: number, height: number): HTMLCanvasElement {
-  if (typeof document === "undefined") throw new Error("previewDrawPage 只能在浏览器中创建默认 Canvas；小程序请传入 Canvas context");
+  if (typeof document === "undefined") throw new Error("previewDrawPage 只能在浏览器中创建默认 Canvas；非浏览器环境请传入 Canvas context");
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;

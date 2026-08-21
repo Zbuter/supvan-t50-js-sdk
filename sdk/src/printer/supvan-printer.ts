@@ -1,13 +1,14 @@
 import type { PrinterTransport } from "../transports/transport";
-import type { PrinterProfile } from "../protocol/profile";
+import type { PrinterProfileInput } from "../protocol/profile";
 import type { LabelBoxInfo, PrintJob, PrinterStatus } from "../types";
 import { BlePrinter, type BlePrinterOptions } from "./ble-printer";
 import { UsbPrinter, type UsbPrinterOptions } from "./usb-printer";
 
 export interface SupvanPrinterOptions {
+  autoReadLabelBox?: boolean;
   ble?: BlePrinterOptions;
   usb?: UsbPrinterOptions;
-  profile?: PrinterProfile;
+  profile?: PrinterProfileInput;
 }
 
 export class SupvanPrinter {
@@ -19,8 +20,16 @@ export class SupvanPrinter {
   ) {
     this.backend =
       transport.kind === "ble"
-        ? new BlePrinter(transport, { ...options.ble, profile: options.profile ?? options.ble?.profile })
-        : new UsbPrinter(transport, { ...options.usb, profile: options.profile ?? options.usb?.profile });
+        ? new BlePrinter(transport, {
+            ...options.ble,
+            autoReadLabelBox: options.autoReadLabelBox ?? options.ble?.autoReadLabelBox,
+            profile: options.profile ?? options.ble?.profile,
+          })
+        : new UsbPrinter(transport, {
+            ...options.usb,
+            autoReadLabelBox: options.autoReadLabelBox ?? options.usb?.autoReadLabelBox,
+            profile: options.profile ?? options.usb?.profile,
+          });
   }
 
   get connected(): boolean {
@@ -47,7 +56,7 @@ export class SupvanPrinter {
     await this.backend.print(job);
   }
 
-  async stop(): Promise<boolean | void> {
+  async stop(): Promise<boolean> {
     return this.backend.stop();
   }
 }

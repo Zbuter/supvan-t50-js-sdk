@@ -18,9 +18,12 @@ import LabelCanvas from "./editor/components/LabelCanvas.vue";
 import PageStrip from "./editor/components/PageStrip.vue";
 import PrintDialog from "./editor/components/PrintDialog.vue";
 import StatusBar from "./editor/components/StatusBar.vue";
+import TemplateDialog from "./editor/components/TemplateDialog.vue";
 import ToolRail from "./editor/components/ToolRail.vue";
 import TopBar from "./editor/components/TopBar.vue";
 import { useLabelEditor } from "./editor/composables/useLabelEditor";
+import { parseSvgToLabelDocument } from "./editor/services/svgImport";
+import { BUILT_IN_TEMPLATES } from "./editor/templates";
 import type { DeviceMethod, LabelSize, PrintSettingsModel, SelectionModel } from "./editor/types";
 
 const editor = useLabelEditor();
@@ -28,6 +31,7 @@ const capabilities = detectCapabilities();
 const printer = shallowRef<SupvanPrinter>();
 const deviceDialogOpen = ref(false);
 const printDialogOpen = ref(false);
+const templateDialogOpen = ref(false);
 const resumePrintAfterDevice = ref(false);
 const connectionBusy = ref(false);
 const printBusy = ref(false);
@@ -66,6 +70,69 @@ function setLabelSize(size: LabelSize): void {
 
 function setCustomLabel(width: number, height: number): void {
   editor.setLabelSize({ id: "custom", name: `${width} x ${height} mm`, width, height });
+}
+
+function exportSvg(): void {
+  try {
+    const source = editor.exportSvg();
+    const url = URL.createObjectURL(new Blob([source], { type: "image/svg+xml;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `label-${editor.label.width}x${editor.label.height}.svg`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    showToast("SVG 已导出");
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error), true);
+  }
+}
+
+async function downloadPng(): Promise<void> {
+  try {
+    await editor.download();
+    showToast("PNG 已导出");
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error), true);
+  }
+}
+
+async function copyLabelData(): Promise<void> {
+  try {
+    await editor.copyLabelData();
+    showToast("标签数据已复制，请在小程序中从剪贴板导入");
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error), true);
+  }
+}
+
+async function pasteLabelData(): Promise<void> {
+  try {
+    await editor.pasteLabelData();
+    showToast("已从剪贴板载入可编辑标签");
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error), true);
+  }
+}
+
+async function importSvg(file: File): Promise<void> {
+  try {
+    const source = await file.text();
+    const document = parseSvgToLabelDocument(source);
+    await editor.loadLabelDocument(document);
+    showToast("SVG 已载入，可继续编辑");
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error), true);
+  }
+}
+
+async function useTemplate(template: (typeof BUILT_IN_TEMPLATES)[number]): Promise<void> {
+  templateDialogOpen.value = false;
+  try {
+    await editor.loadLabelDocument(template.document);
+    showToast(`已载入模板：${template.name}`);
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error), true);
+  }
 }
 
 function openDeviceDialog(resumePrint = false): void {
@@ -232,7 +299,12 @@ onBeforeUnmount(() => {
       @zoom-change="editor.setZoom"
       @connect="openDeviceDialog()"
       @print="printDialogOpen = true"
-      @download="editor.download"
+      @download="downloadPng"
+      @templates="templateDialogOpen = true"
+      @copy-label-data="copyLabelData"
+      @paste-label-data="pasteLabelData"
+      @export-svg="exportSvg"
+      @import-svg="importSvg"
     />
 
     <div class="workspace-layout">
@@ -306,6 +378,14 @@ onBeforeUnmount(() => {
       @close="closeDeviceDialog"
       @select="connectDevice"
       @disconnect="disconnectDevice"
+    />
+
+    <TemplateDialog
+      :open="templateDialogOpen"
+      :templates="BUILT_IN_TEMPLATES"
+      :busy="editor.pageBusy.value"
+      @close="templateDialogOpen = false"
+      @select="useTemplate"
     />
 
     <PrintDialog

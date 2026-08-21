@@ -1,12 +1,19 @@
 export const FRAME_SIZE = 4096;
+/** @deprecated Legacy 48 mm x 8 dots/mm example; there is no global page width. */
 export const PRINT_WIDTH_DOTS = 384;
+/** @deprecated Legacy density paired with PRINT_WIDTH_DOTS. */
 export const DOTS_PER_MM = 8;
+/** @deprecated Derived from the legacy 384-dot example; protocol code calculates this per page. */
 export const BYTES_PER_LINE = PRINT_WIDTH_DOTS / 8;
 export const FRAME_HEADER_SIZE = 14;
+/** @deprecated Derived from the legacy 384-dot example; protocol code calculates this per page. */
 export const BLE_MAX_LINES_PER_FRAME = Math.floor(
   (FRAME_SIZE - FRAME_HEADER_SIZE) / BYTES_PER_LINE,
 );
 export const USB_FRAME_DATA_SIZE = 4074;
+// Public direction codes are shared by BLE and USB. The protocol rasterizers
+// convert these codes to clockwise quarter turns using this table.
+export const PRINT_DIRECTION_TURNS = [0, 2, 3, 1] as const;
 export const HID_REPORT_SIZE = 64;
 export const HID_INPUT_PAYLOAD_SIZE = HID_REPORT_SIZE - 1;
 

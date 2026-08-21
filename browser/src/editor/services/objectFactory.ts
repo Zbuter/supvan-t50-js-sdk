@@ -1,5 +1,7 @@
-import { code128, qrcode } from "bwip-js/browser";
+import { code128 } from "bwip-js/browser";
 import { FabricImage, Line, Rect, Textbox, type FabricObject } from "fabric";
+import qrcodeGenerator from "qrcode-generator";
+import { packMonochromeBitmap } from "shuofang-t50-sdk";
 
 import { THERMAL_BLACK } from "../constants";
 import { createThermalCanvas } from "./monochrome";
@@ -186,15 +188,24 @@ export function createLine(left: number, top: number): Line {
 function renderCodeCanvas(kind: "barcode" | "qrcode", content: string): HTMLCanvasElement {
   const element = document.createElement("canvas");
   if (kind === "qrcode") {
-    qrcode(element, {
-      bcid: "qrcode",
-      text: content,
-      scale: 4,
-      paddingwidth: 0,
-      paddingheight: 0,
-      backgroundcolor: "FFFFFF",
-      barcolor: "000000",
-    });
+    const code = qrcodeGenerator(0, "M");
+    code.addData(content);
+    code.make();
+    const cellSize = 4;
+    const modules = code.getModuleCount();
+    element.width = modules * cellSize;
+    element.height = modules * cellSize;
+    const context = element.getContext("2d");
+    if (!context) throw new Error("无法创建二维码画布");
+    context.imageSmoothingEnabled = false;
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, element.width, element.height);
+    context.fillStyle = "#000000";
+    for (let row = 0; row < modules; row += 1) {
+      for (let column = 0; column < modules; column += 1) {
+        if (code.isDark(row, column)) context.fillRect(column * cellSize, row * cellSize, cellSize, cellSize);
+      }
+    }
   } else {
     code128(element, {
       bcid: "code128",
@@ -275,6 +286,10 @@ export async function createImage(file: File, left: number, top: number): Promis
     scaleX: scale,
     scaleY: scale,
   });
-  setEditorData(object, editorData("image", file.name));
+  const context = element.getContext("2d");
+  const bitmap = context
+    ? packMonochromeBitmap(element.width, element.height, context.getImageData(0, 0, element.width, element.height).data)
+    : undefined;
+  setEditorData(object, { ...editorData("image", file.name), ...(bitmap ? { bitmap } : {}) });
   return object;
 }

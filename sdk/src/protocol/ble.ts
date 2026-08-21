@@ -1,6 +1,7 @@
 import {
   FRAME_HEADER_SIZE,
   FRAME_SIZE,
+  PRINT_DIRECTION_TURNS,
 } from "../constants";
 import { lzmaCompressFrames } from "../compression/lzma";
 import { CommunicationError, ValidationError } from "../errors";
@@ -163,13 +164,13 @@ export function makeParameterBlock(settings: ResolvedPrintSettings): Uint8Array 
 
 export function prepareBleRaster(page: RasterPage, settings: ResolvedPrintSettings): GrayRaster {
   let source = toGrayscale(page);
-  const turns = settings.rotate === 4 ? 0 : settings.rotate;
+  const turns = PRINT_DIRECTION_TURNS[settings.direction];
   source = rotateRaster(source, turns);
-  const printWidth = settings.maxDotValue;
-  const printHeight = Math.max(1, Math.round(settings.materialHeight * settings.dpi));
+  const printWidth = settings.maxWidthDots;
+  const printHeight = Math.max(1, Math.round(settings.materialHeight * settings.dotsPerMm));
   if (source.width > printWidth) {
     throw new ValidationError(
-      `图像宽度 ${source.width} 点超过当前型号最大打印宽度 ${printWidth} 点；协议不会自动缩放`,
+      `图像宽度 ${source.width} 点超过当前页面打印宽度 ${printWidth} 点；协议不会自动缩放`,
     );
   }
   if (source.height > printHeight) {
@@ -226,9 +227,9 @@ export function bleImageFrames(
   settings: ResolvedPrintSettings,
   jobLastPage = false,
 ): Uint8Array[] {
-  const bytesPerLine = Math.ceil(settings.maxDotValue / 8);
+  const bytesPerLine = Math.ceil(settings.maxWidthDots / 8);
   const maxLinesPerFrame = Math.floor((FRAME_SIZE - FRAME_HEADER_SIZE) / bytesPerLine);
-  if (maxLinesPerFrame < 1) throw new ValidationError("当前型号打印点宽超过 BLE 帧容量");
+  if (maxLinesPerFrame < 1) throw new ValidationError("当前页面打印点宽超过 BLE 帧容量");
   const { columns, leading, trailing } = packColumns(prepareBleRaster(page, settings), bytesPerLine);
   let printable = Math.max(0, columns.length - leading - trailing);
   if (printable === 0) printable = 1;

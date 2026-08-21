@@ -1,0 +1,288 @@
+.editor-page {
+  padding-top: 30rpx;
+  padding-bottom: 48rpx;
+}
+
+.editor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24rpx;
+}
+
+.text-button {
+  margin: 0;
+  padding: 0 4rpx;
+  color: #13795b;
+  background: transparent;
+  font-size: 26rpx;
+  line-height: 1.8;
+}
+
+.text-button::after {
+  border: 0;
+}
+
+.preview-card {
+  padding-bottom: 22rpx;
+}
+
+.canvas-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 260rpx;
+  padding: 22rpx;
+  overflow: auto;
+  border: 1rpx solid #dbe2dc;
+  border-radius: 12rpx;
+  background: #edf1ee;
+}
+
+.preview-canvas {
+  display: block;
+  flex: 0 0 auto;
+  box-shadow: 0 10rpx 26rpx rgba(23, 33, 27, 0.12);
+}
+
+.preview-meta {
+  margin-top: 16rpx;
+  color: #68756c;
+  font-size: 23rpx;
+  text-align: right;
+}
+
+.preview-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
+  margin-top: 16rpx;
+}
+
+.preview-control-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  gap: 10rpx;
+}
+
+.canvas-control-button,
+.fine-toggle-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 56rpx;
+  margin: 0;
+  padding: 0;
+  border-radius: 12rpx;
+  color: #176b51;
+  background: #e9f4ef;
+  line-height: 56rpx;
+}
+
+.canvas-control-button {
+  width: 62rpx;
+  font-size: 32rpx;
+}
+
+.fine-toggle-button {
+  min-width: 150rpx;
+  padding: 0 18rpx;
+  font-size: 23rpx;
+}
+
+.canvas-control-button::after,
+.fine-toggle-button::after {
+  border: 0;
+}
+
+.canvas-control-button[disabled],
+.fine-toggle-button[disabled] {
+  color: #9aa59d;
+  background: #edf1ee;
+}
+
+.rotate-control-button {
+  font-size: 32rpx;
+}
+
+.direction-row {
+  gap: 8rpx;
+}
+
+/* Keep the six preview controls compact on narrow phones. */
+.direction-row .canvas-control-button {
+  width: 58rpx;
+}
+
+.page-settings,
+.variables-card,
+.add-object-card {
+  margin-top: 20rpx;
+}
+
+.add-object-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.add-object-button {
+  box-sizing: border-box;
+  flex: 1 1 28%;
+  min-width: 28%;
+  height: 64rpx;
+  margin: 0;
+  padding: 0 10rpx;
+  border: 1rpx solid #cfe1d5;
+  border-radius: 10rpx;
+  color: #176b51;
+  background: #f1f8f4;
+  font-size: 24rpx;
+  line-height: 64rpx;
+}
+
+.add-object-button::after {
+  border: 0;
+}
+
+.add-object-hint {
+  margin-top: 12rpx;
+}
+
+.form-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14rpx;
+}
+
+.geometry-grid {
+  margin-top: 16rpx;
+}
+
+.field {
+  min-width: 0;
+  flex: 1 1 44%;
+}
+
+.field-label {
+  margin-bottom: 8rpx;
+  color: #68756c;
+  font-size: 23rpx;
+}
+
+.field-input,
+.field-textarea,
+.picker-value {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1rpx solid #d4ded6;
+  border-radius: 10rpx;
+  color: #17211b;
+  background: #ffffff;
+  font-size: 26rpx;
+}
+
+.field-input {
+  height: 74rpx;
+  padding: 0 18rpx;
+}
+
+.field-textarea {
+  min-height: 110rpx;
+  padding: 16rpx 18rpx;
+  line-height: 1.5;
+}
+
+.field-input[disabled],
+.field-textarea[disabled] {
+  color: #9aa59d;
+  background: #f3f5f3;
+}
+
+.compact-button {
+  margin-top: 16rpx;
+}
+
+.variables-card .variable-row + .variable-row {
+  margin-top: 14rpx;
+}
+
+.objects-section {
+  margin-top: 30rpx;
+}
+
+.object-card {
+  margin-bottom: 18rpx;
+}
+
+.object-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18rpx;
+}
+
+.object-title {
+  margin-bottom: 5rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.object-index {
+  display: flex;
+  width: 42rpx;
+  height: 42rpx;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #13795b;
+  background: #e4f1eb;
+  font-size: 22rpx;
+}
+
+.content-field {
+  margin-bottom: 4rpx;
+}
+
+.picker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16rpx;
+}
+
+.picker-row .field-label {
+  margin-bottom: 0;
+}
+
+.picker-value {
+  min-width: 190rpx;
+  padding: 14rpx 18rpx;
+  text-align: right;
+}
+
+.picker-arrow {
+  margin-left: 8rpx;
+  color: #13795b;
+}
+
+.empty-card {
+  text-align: center;
+}
+
+.status-message {
+  margin: 12rpx 0 18rpx;
+  padding: 16rpx 18rpx;
+  border-radius: 10rpx;
+  color: #13795b;
+  background: #e8f4ee;
+  font-size: 24rpx;
+}
+
+.save-button {
+  margin-top: 26rpx;
+}

@@ -25,7 +25,8 @@ export default defineConfig({
       entry: {
         index: resolve(import.meta.dirname, "src/index.ts"),
         browser: resolve(import.meta.dirname, "src/browser.ts"),
-        wechat: resolve(import.meta.dirname, "src/wechat.ts"),
+        protocol: resolve(import.meta.dirname, "src/protocol.ts"),
+        internal: resolve(import.meta.dirname, "src/internal.ts"),
       },
       formats: ["es", "cjs"],
       fileName: (format, entryName) => `${entryName}.${format === "es" ? "js" : "cjs"}`,

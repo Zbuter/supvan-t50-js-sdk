@@ -1,15 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  PaperType,
   buildMediaConfig,
   buildVendorRequest,
   hidReports,
   prepareUsbRaster,
-  resolvePrintSettings,
   usbImageFrames,
-} from "../src";
-import { toHex } from "../src/utils/bytes";
+} from "../src/protocol";
+import { PaperType, resolvePrintSettings } from "../src";
+import { toHex } from "../src/internal";
 
 describe("native USB protocol", () => {
   const settings = resolvePrintSettings({

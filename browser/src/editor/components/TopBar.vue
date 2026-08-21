@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import {
   Bluetooth,
+  Copy,
+  ClipboardPaste,
   Download,
+  FileCode,
+  FileUp,
+  Files,
   Printer,
   Redo2,
   RotateCw,
@@ -13,6 +18,7 @@ import {
 import { LABEL_SIZES } from "../constants";
 import type { PreviewRotation } from "../services/rotation";
 import type { LabelSize } from "../types";
+import { ref } from "vue";
 
 const props = defineProps<{
   label: LabelSize;
@@ -38,12 +44,30 @@ const emit = defineEmits<{
   connect: [];
   print: [];
   download: [];
+  templates: [];
+  copyLabelData: [];
+  pasteLabelData: [];
+  exportSvg: [];
+  importSvg: [file: File];
 }>();
+
+const importInput = ref<HTMLInputElement>();
 
 function selectSize(event: Event): void {
   const id = (event.target as HTMLSelectElement).value;
   const size = LABEL_SIZES.find((item) => item.id === id);
   if (size) emit("sizeChange", size);
+}
+
+function openImport(): void {
+  importInput.value?.click();
+}
+
+function onImport(event: Event): void {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (file) emit("importSvg", file);
 }
 </script>
 
@@ -109,6 +133,22 @@ function selectSize(event: Event): void {
     </div>
 
     <div class="topbar-actions">
+      <input ref="importInput" hidden type="file" accept=".svg,image/svg+xml" @change="onImport" />
+      <button class="icon-button" type="button" title="导入 SVG" @click="openImport">
+        <FileUp :size="18" />
+      </button>
+      <button class="icon-button" type="button" title="选择模板" @click="emit('templates')">
+        <Files :size="18" />
+      </button>
+      <button class="icon-button" type="button" title="复制到小程序" @click="emit('copyLabelData')">
+        <Copy :size="18" />
+      </button>
+      <button class="icon-button" type="button" title="从剪贴板导入标签" @click="emit('pasteLabelData')">
+        <ClipboardPaste :size="18" />
+      </button>
+      <button class="icon-button" type="button" title="导出 SVG" @click="emit('exportSvg')">
+        <FileCode :size="18" />
+      </button>
       <button class="icon-button" type="button" title="下载 PNG" @click="emit('download')">
         <Download :size="18" />
       </button>

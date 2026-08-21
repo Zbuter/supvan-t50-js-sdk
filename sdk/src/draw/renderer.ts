@@ -1,93 +1,114 @@
 import qrcode from "qrcode-generator";
 
 import { ValidationError } from "../errors";
-import { dotsForMm, SUPVAN_T50_PROFILE, type PrinterProfile } from "../protocol/profile";
+import { expandPageJob } from "../jobs";
+import {
+  dotsForMm,
+  normalizePrinterProfile,
+  SUPVAN_T50_PROFILE,
+  type PrinterProfile,
+  type PrinterProfileInput,
+} from "../protocol/profile";
 import type { DrawCanvasContext, DrawRenderOptions, DrawRenderTarget } from "./runtime-types";
 import { code128Modules, ean13Modules } from "./barcode";
-import { DrawFontStyle, DrawObjectFormat, type DrawJob, type DrawObject, type DrawPage } from "./types";
+import {
+  DrawFontStyle,
+  DrawObjectFormat,
+  type BarcodeObject,
+  type DrawJob,
+  type DrawObject,
+  type DrawPage,
+  type ImageObject,
+  type LineObject,
+  type QrCodeObject,
+  type RectangleObject,
+  type TextObject,
+} from "./types";
 
 export type { DrawCanvasContext, DrawRenderOptions, DrawRenderTarget } from "./runtime-types";
 export type { DrawJob, DrawObject, DrawPage } from "./types";
 export { DrawFontStyle, DrawObjectFormat } from "./types";
+export { normalizeDrawObject } from "./normalize";
 
 export interface DrawPageSize {
   width: number;
   height: number;
 }
 
-export function drawPageSize(page: Pick<DrawPage, "width" | "height">, profile: PrinterProfile = SUPVAN_T50_PROFILE): DrawPageSize {
+export function drawPageSize(page: Pick<DrawPage, "width" | "height">, profile: PrinterProfileInput = SUPVAN_T50_PROFILE): DrawPageSize {
+  const resolvedProfile = normalizePrinterProfile(profile);
   if (!Number.isFinite(page.width) || !Number.isFinite(page.height) || page.width <= 0 || page.height <= 0) {
     throw new ValidationError("绘制页面宽高必须大于 0");
   }
-  const size = { width: dotsForMm(page.width, profile), height: dotsForMm(page.height, profile) };
-  if (size.width > profile.maxWidthDots) {
-    throw new ValidationError(`当前 ${profile.name} 最大支持 ${profile.maxWidthDots} 点，${page.width}mm 需要 ${size.width} 点；不会缩放`);
-  }
+  const size = { width: dotsForMm(page.width, resolvedProfile), height: dotsForMm(page.height, resolvedProfile) };
   return size;
 }
 
 export function drawObject(
   context: DrawCanvasContext,
   object: DrawObject,
-  profile: PrinterProfile = SUPVAN_T50_PROFILE,
+  profile: PrinterProfileInput = SUPVAN_T50_PROFILE,
   options: DrawRenderOptions = {},
 ): void {
+  const resolvedProfile = normalizePrinterProfile(profile);
   validateObject(object);
-  const x = coordinateToDots(object.x, profile);
-  const y = coordinateToDots(object.y, profile);
-  const width = Math.max(1, dotsForMm(object.width, profile));
-  const height = Math.max(1, dotsForMm(object.height, profile));
+  const x = coordinateToDots(object.x, resolvedProfile);
+  const y = coordinateToDots(object.y, resolvedProfile);
+  const width = Math.max(1, dotsForMm(object.width, resolvedProfile));
+  const height = Math.max(1, dotsForMm(object.height, resolvedProfile));
   context.save();
   context.translate(x + width / 2, y + height / 2);
   context.rotate((normalizeAngle(object.rotation ?? 0) * Math.PI) / 180);
   context.translate(-width / 2, -height / 2);
-  const format = normalizeFormat(object);
-  if (format === DrawObjectFormat.Text) drawText(context, object, width, height, profile);
-  else if (format === DrawObjectFormat.QrCode) drawQrCode(context, object, width, height);
-  else if (format === DrawObjectFormat.Code128 || format === DrawObjectFormat.Ean13) {
-    drawBarcode(context, object, width, height, format);
-  } else if (format === DrawObjectFormat.Rectangle) drawRectangle(context, object, width, height, profile);
-  else if (format === DrawObjectFormat.Line) drawLine(context, object, width, height, profile);
-  else drawImage(context, object, width, height, options);
+  switch (object.format) {
+    case DrawObjectFormat.Text:
+      drawText(context, object, width, height, resolvedProfile);
+      break;
+    case DrawObjectFormat.QrCode:
+      drawQrCode(context, object, width, height);
+      break;
+    case DrawObjectFormat.Code128:
+    case DrawObjectFormat.Ean13:
+      drawBarcode(context, object, width, height, object.format);
+      break;
+    case DrawObjectFormat.Rectangle:
+      drawRectangle(context, object, width, height, resolvedProfile);
+      break;
+    case DrawObjectFormat.Line:
+      drawLine(context, object, width, height, resolvedProfile);
+      break;
+    case DrawObjectFormat.Image:
+      drawImage(context, object, width, height, options);
+      break;
+  }
   context.restore();
 }
 
 export function renderDrawPage(
   context: DrawCanvasContext,
   page: DrawPage,
-  profile: PrinterProfile = SUPVAN_T50_PROFILE,
+  profile: PrinterProfileInput = SUPVAN_T50_PROFILE,
   options: DrawRenderOptions = {},
 ): DrawPageSize {
-  const size = drawPageSize(page, profile);
+  const resolvedProfile = normalizePrinterProfile(profile);
+  const size = drawPageSize(page, resolvedProfile);
   context.clearRect(0, 0, size.width, size.height);
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, size.width, size.height);
-  for (const object of page.objects) drawObject(context, object, profile, options);
+  for (const object of page.objects) drawObject(context, object, resolvedProfile, options);
   return size;
 }
 
 export function renderDrawJob<T extends DrawRenderTarget>(
   job: DrawJob,
   targetFactory: (size: DrawPageSize, page: DrawPage, index: number) => T,
-  profile: PrinterProfile = SUPVAN_T50_PROFILE,
+  profile: PrinterProfileInput = SUPVAN_T50_PROFILE,
   options: DrawRenderOptions = {},
 ): T[] {
-  if (!job.pages.length) throw new ValidationError("绘制任务至少需要一页");
-  const copies = job.settings?.copies ?? 1;
-  if (!Number.isInteger(copies) || copies < 1 || copies > 99) throw new ValidationError("绘制任务 copies 必须是 1-99 的整数");
-  const pages = job.pages.map((page) => {
-    const repeat = page.repeat ?? 1;
-    if (!Number.isInteger(repeat) || repeat < 1) throw new ValidationError("绘制页面 repeat 必须是正整数");
-    drawPageSize(page, profile);
-    return { page, repeat };
+  const ordered = expandPageJob(job, {
+    taskName: "绘制任务",
+    validatePage: (page) => drawPageSize(page, profile),
   });
-  const ordered: DrawPage[] = [];
-  const append = (page: DrawPage) => ordered.push(page);
-  if (job.settings?.oneByOne ?? true) {
-    for (let copy = 0; copy < copies; copy += 1) for (const item of pages) for (let repeat = 0; repeat < item.repeat; repeat += 1) append(item.page);
-  } else {
-    for (const item of pages) for (let repeat = 0; repeat < item.repeat; repeat += 1) for (let copy = 0; copy < copies; copy += 1) append(item.page);
-  }
   return ordered.map((page, index) => {
     const size = drawPageSize(page, profile);
     const target = targetFactory(size, page, index);
@@ -108,42 +129,22 @@ function validateObject(object: DrawObject): void {
 }
 
 function coordinateToDots(value: number, profile: PrinterProfile): number {
-  return Math.max(0, Math.round(value * profile.dpi));
+  return Math.max(0, Math.round(value * profile.dotsPerMm));
 }
 
-function normalizeFormat(object: DrawObject): DrawObjectFormat {
-  const raw = String(object.format ?? object.type ?? object.kind ?? DrawObjectFormat.Text).trim().toUpperCase().replace(/[-\s]/g, "_");
-  if (raw === "QRCODE") return DrawObjectFormat.QrCode;
-  if (raw === "CODE128" || raw === "BARCODE") return DrawObjectFormat.Code128;
-  if (raw === "EAN13") return DrawObjectFormat.Ean13;
-  if (raw === "RECT") return DrawObjectFormat.Rectangle;
-  if (raw === "IMAGE" || raw === "IMG") return DrawObjectFormat.Image;
-  if (raw === "LINE") return DrawObjectFormat.Line;
-  if (raw === "RECTANGLE") return DrawObjectFormat.Rectangle;
-  if (raw === "QR_CODE") return DrawObjectFormat.QrCode;
-  if (raw === "CODE_128") return DrawObjectFormat.Code128;
-  if (raw === "EAN_13") return DrawObjectFormat.Ean13;
-  if (raw === "TEXT") return DrawObjectFormat.Text;
-  throw new ValidationError(`不支持的绘制对象格式：${raw}`);
-}
-
-function valueOf(object: DrawObject, camel: keyof DrawObject, snake: keyof DrawObject): unknown {
-  return object[camel] ?? object[snake];
-}
-
-function drawText(context: DrawCanvasContext, object: DrawObject, width: number, height: number, profile: PrinterProfile): void {
-  const style = Number(valueOf(object, "fontStyle", "font_style") ?? DrawFontStyle.Normal);
-  const fontSize = Math.max(1, Math.round(Number(valueOf(object, "fontSize", "font_size") ?? 3) * profile.dpi));
-  const fontName = String(valueOf(object, "fontName", "font_name") ?? object.fontFamily ?? object.font_family ?? "sans-serif");
-  const fontWeight = style & DrawFontStyle.Bold || object.fontWeight === "bold" || object.font_weight === "bold" ? "bold" : "normal";
-  const text = object.content ?? object.text ?? "";
-  const lineFactor = Math.max(0.5, Number(valueOf(object, "lineHeight", "line_height") ?? 1.25));
+function drawText(context: DrawCanvasContext, object: TextObject, width: number, height: number, profile: PrinterProfile): void {
+  const style = Number(object.fontStyle ?? DrawFontStyle.Normal);
+  const fontSize = Math.max(1, Math.round(Number(object.fontSize ?? 3) * profile.dotsPerMm));
+  const fontName = object.fontFamily ?? "sans-serif";
+  const fontWeight = style & DrawFontStyle.Bold || object.fontWeight === "bold" ? "bold" : "normal";
+  const text = object.content;
+  const lineFactor = Math.max(0.5, Number(object.lineHeight ?? 1.25));
   const lineHeight = Math.max(1, Math.round(fontSize * lineFactor));
-  const autoReturn = Boolean(valueOf(object, "autoReturn", "auto_return") ?? false);
+  const autoReturn = object.autoReturn ?? false;
   const lines = autoReturn ? wrapText(context, text, width) : text.split("\n");
-  const align = normalizeAlign(object.align);
-  const fill = Boolean(valueOf(object, "antiColor", "anti_color")) ? "#ffffff" : "#000000";
-  if (valueOf(object, "antiColor", "anti_color")) {
+  const align = object.align ?? "left";
+  const fill = object.antiColor ? "#ffffff" : "#000000";
+  if (object.antiColor) {
     context.fillStyle = "#000000";
     context.fillRect(0, 0, width, height);
   }
@@ -160,7 +161,7 @@ function drawText(context: DrawCanvasContext, object: DrawObject, width: number,
     if (style & DrawFontStyle.Underline || style & DrawFontStyle.Strikeout) {
       const lineX = align === "left" ? 0 : align === "center" ? (width - measured) / 2 : width - measured;
       context.strokeStyle = fill;
-      context.lineWidth = Math.max(1, Math.round(profile.dpi / 8));
+      context.lineWidth = Math.max(1, Math.round(profile.dotsPerMm / 8));
       if (style & DrawFontStyle.Underline) {
         context.beginPath(); context.moveTo(lineX, y + lineHeight - 1); context.lineTo(lineX + measured, y + lineHeight - 1); context.stroke();
       }
@@ -186,26 +187,33 @@ function wrapText(context: DrawCanvasContext, text: string, width: number): stri
   return lines.length ? lines : [""];
 }
 
-function drawQrCode(context: DrawCanvasContext, object: DrawObject, width: number, height: number): void {
+function drawQrCode(context: DrawCanvasContext, object: QrCodeObject, width: number, height: number): void {
+  if (!object.content) throw new ValidationError("QR_CODE 内容不能为空");
   const code = qrcode(0, "M");
-  code.addData(object.content ?? object.text ?? "");
+  code.addData(object.content);
   code.make();
   const modules = code.getModuleCount();
-  const quiet = 4;
-  const cell = Math.max(1, Math.floor(Math.min(width, height) / (modules + quiet * 2)));
-  const size = modules * cell;
-  const offsetX = Math.floor((width - size) / 2);
-  const offsetY = Math.floor((height - size) / 2);
-  const inverse = Boolean(valueOf(object, "antiColor", "anti_color"));
+  const cellWidth = width / modules;
+  const cellHeight = height / modules;
+  const inverse = object.antiColor ?? false;
   context.fillStyle = inverse ? "#000000" : "#ffffff";
   context.fillRect(0, 0, width, height);
   context.fillStyle = inverse ? "#ffffff" : "#000000";
-  for (let row = 0; row < modules; row += 1) for (let column = 0; column < modules; column += 1) if (code.isDark(row, column)) context.fillRect(offsetX + column * cell, offsetY + row * cell, cell, cell);
+  for (let row = 0; row < modules; row += 1) {
+    for (let column = 0; column < modules; column += 1) {
+      if (!code.isDark(row, column)) continue;
+      const left = Math.round(column * cellWidth);
+      const top = Math.round(row * cellHeight);
+      const right = Math.round((column + 1) * cellWidth);
+      const bottom = Math.round((row + 1) * cellHeight);
+      context.fillRect(left, top, Math.max(1, right - left), Math.max(1, bottom - top));
+    }
+  }
 }
 
-function drawBarcode(context: DrawCanvasContext, object: DrawObject, width: number, height: number, format: DrawObjectFormat): void {
-  const modules = format === DrawObjectFormat.Ean13 ? ean13Modules(object.content ?? object.text ?? "") : code128Modules(object.content ?? object.text ?? "");
-  const inverse = Boolean(valueOf(object, "antiColor", "anti_color"));
+function drawBarcode(context: DrawCanvasContext, object: BarcodeObject, width: number, height: number, format: DrawObjectFormat.Code128 | DrawObjectFormat.Ean13): void {
+  const modules = format === DrawObjectFormat.Ean13 ? ean13Modules(object.content) : code128Modules(object.content);
+  const inverse = object.antiColor ?? false;
   const quiet = Math.max(4, Math.round(modules.length * 0.08));
   const usable = Math.max(1, width - quiet * 2);
   const scale = usable / modules.length;
@@ -215,29 +223,25 @@ function drawBarcode(context: DrawCanvasContext, object: DrawObject, width: numb
   modules.forEach((bar, index) => { if (bar) context.fillRect(quiet + index * scale, 0, Math.max(0.5, scale + 0.05), height); });
 }
 
-function drawRectangle(context: DrawCanvasContext, object: DrawObject, width: number, height: number, profile: PrinterProfile): void {
+function drawRectangle(context: DrawCanvasContext, object: RectangleObject, width: number, height: number, profile: PrinterProfile): void {
   if (object.fill && object.fill !== "transparent") { context.fillStyle = thermalColor(object.fill); context.fillRect(0, 0, width, height); }
   context.strokeStyle = thermalColor(object.stroke ?? "#000000");
-  context.lineWidth = Math.max(1, Math.round(Number(valueOf(object, "strokeWidth", "stroke_width") ?? 0.35) * profile.dpi));
+  context.lineWidth = Math.max(1, Math.round(Number(object.strokeWidth ?? 0.35) * profile.dotsPerMm));
   context.strokeRect(0, 0, width, height);
 }
 
-function drawLine(context: DrawCanvasContext, object: DrawObject, width: number, height: number, profile: PrinterProfile): void {
+function drawLine(context: DrawCanvasContext, object: LineObject, width: number, height: number, profile: PrinterProfile): void {
   context.strokeStyle = thermalColor(object.stroke ?? "#000000");
-  context.lineWidth = Math.max(1, Math.round(Number(valueOf(object, "strokeWidth", "stroke_width") ?? 0.35) * profile.dpi));
+  context.lineWidth = Math.max(1, Math.round(Number(object.strokeWidth ?? 0.35) * profile.dotsPerMm));
   context.beginPath(); context.moveTo(0, height / 2); context.lineTo(width, height / 2); context.stroke();
 }
 
-function drawImage(context: DrawCanvasContext, object: DrawObject, width: number, height: number, options: DrawRenderOptions): void {
+function drawImage(context: DrawCanvasContext, object: ImageObject, width: number, height: number, options: DrawRenderOptions): void {
   const source = options.imageResolver?.(object) ?? object.image;
-  if (!source || typeof source === "string" || !("width" in source || "naturalWidth" in source)) throw new ValidationError("IMAGE 对象需要 imageResolver 或 CanvasImageSource");
+  if (!source || typeof source === "string" || "data" in source || !("width" in source || "naturalWidth" in source)) {
+    throw new ValidationError("IMAGE 对象需要 imageResolver 或 CanvasImageSource");
+  }
   context.drawImage(source as CanvasImageSource, 0, 0, width, height);
-}
-
-function normalizeAlign(value: DrawObject["align"]): "left" | "center" | "right" {
-  if (value === 1 || value === "center") return "center";
-  if (value === 2 || value === "right") return "right";
-  return "left";
 }
 
 function thermalColor(value: string): string {

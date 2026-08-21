@@ -3,13 +3,28 @@ import { sleep } from "../utils/bytes";
 
 export type TransportKind = "ble" | "usb";
 
+export type BulkAckMode = "required" | "optional" | "none";
+export type PageSubmissionMode = "separate" | "batched";
+export type CompletionMode = "device-confirmed" | "submit-confirmed";
+
+export interface TransportCapabilities {
+  bulkAck: BulkAckMode;
+  pageSubmission: PageSubmissionMode;
+  completion: CompletionMode;
+}
+
 export interface PrinterTransport {
   readonly kind: TransportKind;
   readonly name: string;
   readonly connected: boolean;
+  readonly capabilities?: TransportCapabilities;
+  /** @deprecated Use capabilities.bulkAck. */
   readonly bulkAckRequired?: boolean;
+  /** @deprecated Use capabilities.bulkAck. */
   readonly bulkAckOptional?: boolean;
+  /** @deprecated Use capabilities.pageSubmission. */
   readonly separatePhysicalPages?: boolean;
+  /** @deprecated Use capabilities.completion. */
   readonly printCompletionOnSubmit?: boolean;
   connect(): Promise<void>;
   disconnect(): Promise<void>;
@@ -17,6 +32,18 @@ export interface PrinterTransport {
   write(data: Uint8Array): Promise<void>;
   /** Returns up to size bytes after at least one byte is available. */
   read(size?: number, timeoutMs?: number): Promise<Uint8Array>;
+}
+
+export function getTransportCapabilities(transport: PrinterTransport): TransportCapabilities {
+  if (transport.capabilities) return transport.capabilities;
+  if (transport.bulkAckRequired && transport.bulkAckOptional) {
+    throw new TypeError("PrinterTransport 不能同时要求或允许 bulk ACK");
+  }
+  return {
+    bulkAck: transport.bulkAckRequired ? "required" : transport.bulkAckOptional ? "optional" : "none",
+    pageSubmission: transport.separatePhysicalPages ? "separate" : "batched",
+    completion: transport.printCompletionOnSubmit ? "submit-confirmed" : "device-confirmed",
+  };
 }
 
 export async function writeChunked(

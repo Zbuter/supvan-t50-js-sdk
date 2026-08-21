@@ -10,6 +10,14 @@ import { computed, reactive, ref, shallowRef } from "vue";
 
 import type { RasterPage } from "shuofang-t50-sdk";
 import {
+  deserializeLabelDocument,
+  serializeLabelDocument,
+  unpackMonochromeBitmap,
+  type LabelBitmapResource,
+  type LabelDocument,
+  type LabelObject,
+} from "shuofang-t50-sdk";
+import {
   DEFAULT_LABEL_SIZE,
   EDITOR_DOTS_PER_MM,
   LABEL_SIZE_LIMITS,
@@ -18,7 +26,7 @@ import {
   THERMAL_BLACK,
 } from "../constants";
 import { alignSelection, type CanvasBounds } from "../services/alignment";
-import { downloadPng, exportRaster } from "../services/exportLabel";
+import { copyLabelTransferToClipboard, downloadPng, exportRaster, readLabelTransferFromClipboard } from "../services/exportLabel";
 import { EditorHistory } from "../services/history";
 import {
   applyStrokeStyle,
@@ -57,6 +65,32 @@ interface EditorPage extends EditorPageSummary {
   snapshot: string;
 }
 
+interface RawCanvasObject {
+  type?: string;
+  left?: number;
+  top?: number;
+  width?: number;
+  height?: number;
+  scaleX?: number;
+  scaleY?: number;
+  angle?: number;
+  text?: string;
+  fontFamily?: string;
+  fontSize?: number;
+  fontWeight?: string;
+  textAlign?: string;
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  src?: string;
+  data?: {
+    id?: string;
+    kind?: string;
+    content?: string;
+    bitmap?: LabelBitmapResource;
+  };
+}
+
 const EMPTY_SELECTION: SelectionModel = {
   count: 0,
   x: 0,
@@ -79,6 +113,12 @@ function rounded(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
+function documentRounded(value: number): number {
+  // Keep sub-millimeter geometry precise enough to round-trip T50 dots
+  // (1 dot = 0.125 mm) instead of collapsing objects to 0.1 mm increments.
+  return Math.round(value * 1000) / 1000;
+}
+
 function createPageId(): string {
   return typeof crypto.randomUUID === "function"
     ? crypto.randomUUID()
@@ -92,6 +132,108 @@ function isTypingTarget(target: EventTarget | null): boolean {
     target instanceof HTMLSelectElement ||
     (target instanceof HTMLElement && target.isContentEditable)
   );
+}
+
+function rawCanvasObjectToLabelObject(
+  raw: RawCanvasObject,
+  index: number,
+  resources: NonNullable<LabelDocument["resources"]>,
+): LabelObject | undefined {
+  const data = raw.data ?? {};
+  const kind = data.kind ?? (raw.type === "textbox" ? "text" : raw.type === "rect" ? "rectangle" : raw.type === "line" ? "line" : "image");
+  const x = documentRounded(Number(raw.left ?? 0) / EDITOR_DOTS_PER_MM);
+  const y = documentRounded(Number(raw.top ?? 0) / EDITOR_DOTS_PER_MM);
+  const width = Math.max(0.001, documentRounded(Number(raw.width ?? 1) * Math.abs(Number(raw.scaleX ?? 1)) / EDITOR_DOTS_PER_MM));
+  const height = Math.max(0.001, documentRounded(Number(raw.height ?? 1) * Math.abs(Number(raw.scaleY ?? 1)) / EDITOR_DOTS_PER_MM));
+  const base = { id: data.id ?? `canvas-${index + 1}`, x, y, width, height, rotation: Number(raw.angle ?? 0) };
+  if (kind === "text") return { ...base, type: "text", text: raw.text ?? data.content ?? "", fontFamily: raw.fontFamily, fontSize: Math.max(0.001, documentRounded(Number(raw.fontSize ?? 24) / EDITOR_DOTS_PER_MM)), fontWeight: raw.fontWeight === "bold" ? "bold" : "normal", align: raw.textAlign === "center" || raw.textAlign === "right" ? raw.textAlign : "left" };
+  if (kind === "qrcode") return { ...base, type: "qr", content: data.content ?? "" };
+  if (kind === "barcode") return { ...base, type: "barcode", format: "CODE_128", content: data.content ?? "" };
+  if (kind === "rectangle") return { ...base, type: "rectangle", fill: raw.fill, stroke: raw.stroke, strokeWidth: documentRounded(Number(raw.strokeWidth ?? 2) / EDITOR_DOTS_PER_MM) };
+  if (kind === "line") return { ...base, type: "line", stroke: raw.stroke, strokeWidth: documentRounded(Number(raw.strokeWidth ?? 2) / EDITOR_DOTS_PER_MM) };
+  if (kind === "image" && (raw.src || data.bitmap)) {
+    const resourceId = `image-${data.id ?? index + 1}`;
+    if (data.bitmap) {
+      resources.bitmaps ??= {};
+      resources.bitmaps[resourceId] = data.bitmap;
+    } else {
+      const parsed = parseDataUrl(raw.src ?? "");
+      if (!parsed) return undefined;
+      resources.images ??= {};
+      resources.images[resourceId] = parsed;
+    }
+    return { ...base, type: "image", resourceId, fit: "fill" };
+  }
+  return undefined;
+}
+
+async function labelObjectToFabricObject(object: LabelObject, document: LabelDocument): Promise<FabricObject | undefined> {
+  const left = object.x * EDITOR_DOTS_PER_MM;
+  const top = object.y * EDITOR_DOTS_PER_MM;
+  const width = object.width * EDITOR_DOTS_PER_MM;
+  const height = object.height * EDITOR_DOTS_PER_MM;
+  if (object.type === "text") {
+    const target = createText(left, top);
+    target.set({ width, fontSize: object.fontSize * EDITOR_DOTS_PER_MM, text: object.text, fontFamily: object.fontFamily ?? "Microsoft YaHei", fontWeight: object.fontWeight ?? "normal", textAlign: object.align ?? "left", angle: object.rotation ?? 0 });
+    setEditorData(target, { id: object.id, kind: "text", content: object.text });
+    return target;
+  }
+  if (object.type === "rectangle") {
+    const target = createRectangle(left, top);
+    target.set({ width, height, fill: object.fill ?? "transparent", stroke: object.stroke ?? THERMAL_BLACK, strokeWidth: (object.strokeWidth ?? 0.35) * EDITOR_DOTS_PER_MM, angle: object.rotation ?? 0 });
+    setEditorData(target, { id: object.id, kind: "rectangle" });
+    return target;
+  }
+  if (object.type === "line") {
+    const target = createLine(left, top);
+    target.set({ width, height, stroke: object.stroke ?? THERMAL_BLACK, strokeWidth: (object.strokeWidth ?? 0.35) * EDITOR_DOTS_PER_MM, angle: object.rotation ?? 0 });
+    setEditorData(target, { id: object.id, kind: "line" });
+    return target;
+  }
+  if (object.type === "qr" || object.type === "barcode") {
+    const target = createCode(object.type === "qr" ? "qrcode" : "barcode", object.content, left, top);
+    target.set({ scaleX: width / Math.max(1, target.width), scaleY: height / Math.max(1, target.height), angle: object.rotation ?? 0 });
+    setEditorData(target, { id: object.id, kind: object.type === "qr" ? "qrcode" : "barcode", content: object.content, ...(object.type === "barcode" ? { barcodeType: "code128" as const } : {}) });
+    return target;
+  }
+  if (object.type === "image") {
+    const resource = document.resources?.images?.[object.resourceId];
+    const bitmap = document.resources?.bitmaps?.[object.resourceId];
+    const target = resource
+      ? await FabricImage.fromURL(resource.data.startsWith("data:") ? resource.data : `data:${resource.mime};base64,${resource.data}`)
+      : bitmap
+        ? new FabricImage(bitmapToCanvas(bitmap))
+        : undefined;
+    if (!target) return undefined;
+    target.set({ originX: "left", originY: "top", left, top, scaleX: width / Math.max(1, target.width), scaleY: height / Math.max(1, target.height), angle: object.rotation ?? 0, imageSmoothing: false });
+    setEditorData(target, { id: object.id, kind: "image", content: object.resourceId, ...(bitmap ? { bitmap } : {}) });
+    return target;
+  }
+  return undefined;
+}
+
+function parseDataUrl(value: string): { mime: string; data: string } | undefined {
+  const match = value.match(/^data:([^;,]+)(?:;[^,]*)?;base64,(.+)$/);
+  return match ? { mime: match[1]!, data: match[2]! } : undefined;
+}
+
+function bitmapToCanvas(resource: LabelBitmapResource): HTMLCanvasElement {
+  const element = document.createElement("canvas");
+  element.width = resource.widthDots;
+  element.height = resource.heightDots;
+  const context = element.getContext("2d");
+  if (!context) throw new Error("当前浏览器无法创建位图预览");
+  const pixels = unpackMonochromeBitmap(resource);
+  const imageData = context.createImageData(resource.widthDots, resource.heightDots);
+  for (let index = 0; index < pixels.length; index += 1) {
+    const value = pixels[index]!;
+    imageData.data[index * 4] = value;
+    imageData.data[index * 4 + 1] = value;
+    imageData.data[index * 4 + 2] = value;
+    imageData.data[index * 4 + 3] = 255;
+  }
+  context.putImageData(imageData, 0, 0);
+  return element;
 }
 
 export function useLabelEditor() {
@@ -188,6 +330,76 @@ export function useLabelEditor() {
   function blankPageSnapshot(): string {
     const state = canvas().toObject(["data"]);
     return JSON.stringify({ ...state, objects: [], background: "#ffffff" });
+  }
+
+  function labelDocumentFromSnapshot(snapshot: string | undefined): LabelDocument {
+    const parsed = snapshot ? JSON.parse(snapshot) as { objects?: RawCanvasObject[] } : { objects: [] };
+    const resources: NonNullable<LabelDocument["resources"]> = { images: {}, bitmaps: {} };
+    const objects = (parsed.objects ?? []).map((object, index) => rawCanvasObjectToLabelObject(object, index, resources)).filter((object): object is LabelObject => Boolean(object));
+    const document: LabelDocument = {
+      version: 1,
+      name: label.name,
+      width: label.width,
+      height: label.height,
+      objects,
+      resources: Object.keys(resources.images ?? {}).length || Object.keys(resources.bitmaps ?? {}).length ? resources : undefined,
+    };
+    return deserializeLabelDocument(document);
+  }
+
+  function toLabelDocument(pageIndex = activePageIndex.value): LabelDocument {
+    if (pageIndex === activePageIndex.value) saveCurrentPage();
+    return labelDocumentFromSnapshot(pages.value[pageIndex]?.snapshot);
+  }
+
+  function exportSvg(): string {
+    const current = canvas();
+    const active = current.getActiveObject();
+    const physicalWidth = label.width * EDITOR_DOTS_PER_MM;
+    const physicalHeight = label.height * EDITOR_DOTS_PER_MM;
+    const embeddedDocument = serializeLabelDocument(toLabelDocument());
+    current.discardActiveObject();
+    current.requestRenderAll();
+    try {
+      const source = current.toSVG({
+        suppressPreamble: true,
+        width: `${label.width}mm`,
+        height: `${label.height}mm`,
+        viewBox: { x: 0, y: 0, width: physicalWidth, height: physicalHeight },
+      });
+      const metadata = `<metadata data-supvan-label-document="${encodeURIComponent(embeddedDocument)}"></metadata>`;
+      const withMetadata = source.replace(/(<svg\b[^>]*>)/, `$1${metadata}`);
+      return withMetadata.replace("<svg ", `<svg data-supvan-format="fabric-1" data-supvan-dots-per-mm="${EDITOR_DOTS_PER_MM}" `);
+    } finally {
+      if (active) current.setActiveObject(active);
+      current.requestRenderAll();
+    }
+  }
+
+  async function loadLabelDocument(input: LabelDocument | string): Promise<void> {
+    const document = deserializeLabelDocument(input);
+    const current = canvas();
+    pageBusy.value = true;
+    pageLoading = true;
+    try {
+      label.id = "custom";
+      label.name = `${document.width} x ${document.height} mm`;
+      label.width = document.width;
+      label.height = document.height;
+      current.clear();
+      applyDimensions();
+      const objects = await Promise.all(document.objects.map((object) => labelObjectToFabricObject(object, document)));
+      objects.filter((object): object is FabricObject => Boolean(object)).forEach((object) => current.add(object));
+      current.discardActiveObject();
+      current.requestRenderAll();
+      pages.value = [{ id: createPageId(), name: "第 1 页", snapshot: canvasSnapshot(current) }];
+      activePageIndex.value = 0;
+      resetHistory(current);
+      updateSelection();
+    } finally {
+      pageLoading = false;
+      pageBusy.value = false;
+    }
   }
 
   async function restorePage(index: number): Promise<void> {
@@ -818,7 +1030,15 @@ export function useLabelEditor() {
   }
 
   function download(): void {
-    withPrintDimensions(() => downloadPng(canvas()));
+    withPrintDimensions(() => downloadPng(canvas(), `label-${label.width}x${label.height}.png`));
+  }
+
+  async function copyLabelData(): Promise<void> {
+    await copyLabelTransferToClipboard(toLabelDocument());
+  }
+
+  async function pasteLabelData(): Promise<void> {
+    await loadLabelDocument(await readLabelTransferFromClipboard());
   }
 
   async function rasterPages(): Promise<RasterPage[]> {
@@ -827,8 +1047,8 @@ export function useLabelEditor() {
     const physicalHeight = label.height * EDITOR_DOTS_PER_MM;
     const element = document.createElement("canvas");
     const temporary = new Canvas(element, {
-      width: label.width * EDITOR_DOTS_PER_MM,
-      height: label.height * EDITOR_DOTS_PER_MM,
+      width: physicalWidth,
+      height: physicalHeight,
       backgroundColor: "#ffffff",
     });
     try {
@@ -836,10 +1056,7 @@ export function useLabelEditor() {
       for (const page of pages.value) {
         await temporary.loadFromJSON(page.snapshot);
         configureCanvasObjects(temporary);
-        temporary.setDimensions({
-          width: label.width * EDITOR_DOTS_PER_MM,
-          height: label.height * EDITOR_DOTS_PER_MM,
-        });
+        temporary.setDimensions({ width: physicalWidth, height: physicalHeight });
         temporary.setViewportTransform(previewViewportTransform(physicalWidth, physicalHeight, 0));
         temporary.requestRenderAll();
         output.push(exportRaster(temporary));
@@ -891,6 +1108,11 @@ export function useLabelEditor() {
     raster,
     rasterPages,
     download,
+    copyLabelData,
+    pasteLabelData,
+    toLabelDocument,
+    exportSvg,
+    loadLabelDocument,
   };
 }
 

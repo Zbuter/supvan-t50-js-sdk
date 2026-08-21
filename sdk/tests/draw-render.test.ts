@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DrawObjectFormat,
+  normalizeDrawObject,
   normalizeAngle,
   renderDrawJob,
   renderDrawPage,
@@ -35,6 +36,34 @@ function context(): DrawCanvasContext {
 }
 
 describe("draw-object preview renderer", () => {
+  it("normalizes legacy aliases into the canonical object model", () => {
+    expect(normalizeDrawObject({
+      x: 0,
+      y: 0,
+      width: 20,
+      height: 5,
+      type: "text",
+      text: "测试",
+      font_name: "SimHei",
+      font_size: 4,
+      anti_color: true,
+    })).toMatchObject({
+      format: DrawObjectFormat.Text,
+      content: "测试",
+      fontFamily: "SimHei",
+      fontSize: 4,
+      antiColor: true,
+    });
+    expect(() => normalizeDrawObject({
+      x: 0,
+      y: 0,
+      width: 1,
+      height: 1,
+      format: DrawObjectFormat.Text,
+      kind: DrawObjectFormat.QrCode,
+    })).toThrow("format、type、kind 值冲突");
+  });
+
   it("renders text and QR objects at printer dots without scaling", () => {
     const page: DrawPage = {
       width: 30,
@@ -66,7 +95,10 @@ describe("draw-object preview renderer", () => {
     expect(normalizeAngle(-90)).toBe(270);
   });
 
-  it("rejects a page wider than the printer head instead of shrinking it", () => {
-    expect(() => renderDrawPage(context(), { width: 50, height: 30, objects: [] })).toThrow(/不会缩放/);
+  it("uses the page width instead of a fixed 384-dot limit", () => {
+    expect(renderDrawPage(context(), { width: 50, height: 30, objects: [] })).toEqual({
+      width: 400,
+      height: 240,
+    });
   });
 });

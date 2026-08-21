@@ -1,6 +1,6 @@
 import { HID_INPUT_PAYLOAD_SIZE, USB_COMMANDS } from "../constants";
 import { CommunicationError, DeviceError, TimeoutError } from "../errors";
-import { SUPVAN_T50_PROFILE, type PrinterProfile } from "../protocol/profile";
+import { normalizePrinterProfile, SUPVAN_T50_PROFILE, type PrinterProfile, type PrinterProfileInput } from "../protocol/profile";
 import { parseLabelBoxData } from "../protocol/ble";
 import {
   buildMediaConfig,
@@ -19,12 +19,17 @@ import {
   type PrinterStatus,
 } from "../types";
 import { concatBytes, sleep } from "../utils/bytes";
+import type { TimeoutOptions } from "../timeouts";
 
 export interface UsbPrinterOptions {
+  timeouts?: Pick<TimeoutOptions, "readTimeoutMs" | "printTimeoutMs">;
+  autoReadLabelBox?: boolean;
+  /** @deprecated Use timeouts.printTimeoutMs. */
   timeoutMs?: number;
+  /** @deprecated Use timeouts.readTimeoutMs. */
   ioTimeoutMs?: number;
   pollIntervalMs?: number;
-  profile?: PrinterProfile;
+  profile?: PrinterProfileInput;
 }
 
 export class UsbPrinter {
@@ -32,6 +37,7 @@ export class UsbPrinter {
   private readonly ioTimeoutMs: number;
   private readonly pollIntervalMs: number;
   private readonly profile: PrinterProfile;
+  private readonly autoReadLabelBox: boolean;
   private totalPages = 0;
 
   constructor(
@@ -39,10 +45,11 @@ export class UsbPrinter {
     options: UsbPrinterOptions = {},
   ) {
     if (transport.kind !== "usb") throw new TypeError("UsbPrinter 需要 USB transport");
-    this.timeoutMs = options.timeoutMs ?? 120000;
-    this.ioTimeoutMs = options.ioTimeoutMs ?? 2000;
+    this.timeoutMs = options.timeouts?.printTimeoutMs ?? options.timeoutMs ?? 120000;
+    this.ioTimeoutMs = options.timeouts?.readTimeoutMs ?? options.ioTimeoutMs ?? 2000;
     this.pollIntervalMs = options.pollIntervalMs ?? 50;
-    this.profile = options.profile ?? SUPVAN_T50_PROFILE;
+    this.profile = normalizePrinterProfile(options.profile ?? SUPVAN_T50_PROFILE);
+    this.autoReadLabelBox = options.autoReadLabelBox ?? true;
   }
 
   get connected(): boolean {
@@ -110,13 +117,13 @@ export class UsbPrinter {
 
   async stop(): Promise<boolean> {
     let status = await this.getStatus();
-    if (!status.printing) return true;
+    if (!status.flags.printing) return true;
     await this.commandStatus(USB_COMMANDS.stopPrint);
     const deadline = Date.now() + Math.min(this.timeoutMs, 6000);
     while (Date.now() < deadline) {
       await sleep(Math.max(this.pollIntervalMs, 20));
       status = await this.getStatus();
-      if (!status.printing) return true;
+      if (!status.flags.printing) return true;
     }
     return false;
   }
@@ -125,7 +132,7 @@ export class UsbPrinter {
     while (Date.now() < deadline) {
       const status = await this.getStatus();
       this.assertNoFatal(status);
-      if (!status.busy) return status;
+      if (!status.flags.busy) return status;
       await sleep(Math.max(this.pollIntervalMs, 10));
     }
     throw new CommunicationError("等待 USB 设备检测命令超时");
@@ -136,7 +143,7 @@ export class UsbPrinter {
       job.settings?.materialWidth === undefined ||
       job.settings?.materialHeight === undefined ||
       job.settings?.gap === undefined;
-    const labelBox = missingMedia ? await this.readLabelBox() : undefined;
+    const labelBox = missingMedia && this.autoReadLabelBox ? await this.readLabelBox() : undefined;
     const settings = resolvePrintSettings(job.settings, labelBox, this.profile);
     const pages = expandPrintPages({ ...job, settings });
     this.totalPages = pages.length;
@@ -151,7 +158,7 @@ export class UsbPrinter {
     await this.commandStatus(USB_COMMANDS.checkDevice);
     let status = await this.waitCommandReady(deadline);
     this.assertNoFatal(status);
-    if (status.printing) throw new DeviceError("打印机正在执行其他任务");
+    if (status.flags.printing) throw new DeviceError("打印机正在执行其他任务");
 
     status = await this.commandStatus(USB_COMMANDS.startPrint, 1);
     this.assertNoFatal(status);
@@ -161,11 +168,11 @@ export class UsbPrinter {
         await this.stop();
         throw new CommunicationError("USB 图像传输超时");
       }
-      if (status.bufferFull) {
+      if (status.flags.bufferFull) {
         await sleep(Math.max(this.pollIntervalMs, 5));
         status = await this.getStatus();
         this.assertNoFatal(status);
-        if (!status.printing) throw new DeviceError("打印任务在传输完成前终止");
+        if (!status.flags.printing) throw new DeviceError("打印任务在传输完成前终止");
         continue;
       }
       const block = selectUsbTransferBlock(frames.slice(frameIndex));
@@ -178,16 +185,16 @@ export class UsbPrinter {
     }
 
     const startGrace = Math.min(deadline, Date.now() + 3000);
-    let observedPrinting = status.printing;
+    let observedPrinting = status.flags.printing;
     while (Date.now() < deadline) {
       await sleep(Math.max(this.pollIntervalMs, 10));
       status = await this.getStatus();
       this.assertNoFatal(status);
-      observedPrinting ||= status.printing;
-      if (status.printedPages >= this.totalPages) return;
-      if (!status.printing) {
+      observedPrinting ||= status.flags.printing;
+      if (status.metrics.printedPages >= this.totalPages) return;
+      if (!status.flags.printing) {
         if (!observedPrinting && Date.now() < startGrace) continue;
-        throw new DeviceError(`USB 打印任务提前结束：${status.printedPages}/${this.totalPages} 页`);
+        throw new DeviceError(`USB 打印任务提前结束：${status.metrics.printedPages}/${this.totalPages} 页`);
       }
     }
     await this.stop();

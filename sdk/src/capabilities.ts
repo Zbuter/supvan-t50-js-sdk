@@ -2,7 +2,6 @@ export interface RuntimeCapabilities {
   secureContext: boolean;
   webBluetooth: boolean;
   webHid: boolean;
-  wechatBle: boolean;
 }
 
 export function detectCapabilities(): RuntimeCapabilities {
@@ -16,6 +15,5 @@ export function detectCapabilities(): RuntimeCapabilities {
     secureContext,
     webBluetooth: secureContext && Boolean(extended?.bluetooth),
     webHid,
-    wechatBle: Boolean((globalThis as typeof globalThis & { wx?: unknown }).wx),
   };
 }

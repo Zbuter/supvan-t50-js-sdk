@@ -48,7 +48,14 @@ export interface WebBluetoothOptions {
 
 export class WebBluetoothTransport implements PrinterTransport {
   readonly kind = "ble" as const;
+  readonly capabilities = {
+    bulkAck: "none",
+    pageSubmission: "separate",
+    completion: "device-confirmed",
+  } as const;
+  /** @deprecated Use capabilities.bulkAck. */
   readonly bulkAckRequired = false;
+  /** @deprecated Use capabilities.pageSubmission. */
   readonly separatePhysicalPages = true;
   private readonly queue = new AsyncByteQueue();
   private readonly chunkSize: number;

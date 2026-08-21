@@ -1,4 +1,4 @@
-import type { PrinterStatus } from "../types";
+import type { PrinterStatus, PrinterStatusFlags, PrinterMetrics } from "../types";
 import { PrinterState } from "../types";
 
 const DESCRIPTIONS: Record<PrinterState, string> = {
@@ -14,7 +14,8 @@ const DESCRIPTIONS: Record<PrinterState, string> = {
   [PrinterState.CommunicationError]: "通信异常",
 };
 
-export interface StatusFields extends Omit<PrinterStatus, "state" | "description" | "errorMessage" | "ready"> {}
+export interface StatusFields
+  extends Omit<PrinterStatus, "state" | "flags" | "metrics" | "description" | "errorMessage" | "ready"> {}
 
 function statusFlagError(fields: StatusFields): string {
   if (fields.headOverheat) return DESCRIPTIONS[PrinterState.HeadOverheat];
@@ -29,6 +30,30 @@ function statusFlagError(fields: StatusFields): string {
 }
 
 export function makeStatus(state: PrinterState, fields: StatusFields): PrinterStatus {
+  const flags: PrinterStatusFlags = {
+    bufferFull: fields.bufferFull,
+    headOverheat: fields.headOverheat,
+    labelReadWriteError: fields.labelReadWriteError,
+    mediaNotDetected: fields.mediaNotDetected,
+    mediaLow: fields.mediaLow,
+    mediaEmpty: fields.mediaEmpty,
+    mediaUnrecognized: fields.mediaUnrecognized,
+    mediaNotInstalled: fields.mediaNotInstalled,
+    batteryLow: fields.batteryLow,
+    busy: fields.busy,
+    coverOpen: fields.coverOpen,
+    usbInserted: fields.usbInserted,
+    printing: fields.printing,
+    secondDeviceBusy: fields.secondDeviceBusy,
+    labelNotInstalled: fields.labelNotInstalled,
+    charging: fields.charging,
+  };
+  const metrics: PrinterMetrics = {
+    printedPages: fields.printedPages,
+    totalPages: fields.totalPages,
+    temperatureC: fields.temperatureC,
+    voltageV: fields.voltageV,
+  };
   const flagError = statusFlagError(fields);
   const blockingMessage =
     state !== PrinterState.Ready
@@ -49,6 +74,8 @@ export function makeStatus(state: PrinterState, fields: StatusFields): PrinterSt
         : DESCRIPTIONS[state];
   return {
     state,
+    flags,
+    metrics,
     description,
     errorMessage: blockingMessage,
     ready:

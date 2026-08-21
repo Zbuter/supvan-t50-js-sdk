@@ -5,7 +5,6 @@ dist/
 dist-sdk/
 .vite/
 coverage/
-miniprogram/
 sdk/miniprogram/
 *.log
 .DS_Store

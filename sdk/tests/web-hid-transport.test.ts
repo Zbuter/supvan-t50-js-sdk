@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { PrinterState, UsbPrinter, WebHidTransport } from "../src";
+import { PrinterState, UsbPrinter } from "../src";
+import { WebHidTransport } from "../src/transports/web-hid";
 
 function inputReport(data: Uint8Array): Event {
   const event = new Event("inputreport");
@@ -48,11 +49,14 @@ describe("WebHidTransport status reports", () => {
 
     await expect(printer.getStatus()).resolves.toMatchObject({
       state: PrinterState.CoverOpen,
+      flags: { coverOpen: true },
       coverOpen: true,
       ready: false,
     });
     await expect(printer.getStatus()).resolves.toMatchObject({
       state: PrinterState.Ready,
+      flags: { coverOpen: false },
+      metrics: { printedPages: 0, totalPages: 0 },
       coverOpen: false,
       ready: true,
     });

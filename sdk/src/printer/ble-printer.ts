@@ -9,8 +9,8 @@ import {
   parseBleResponse,
   parseBleStatus,
 } from "../protocol/ble";
-import type { PrinterTransport } from "../transports/transport";
-import { SUPVAN_T50_PROFILE, type PrinterProfile } from "../protocol/profile";
+import { getTransportCapabilities, type PrinterTransport, type TransportCapabilities } from "../transports/transport";
+import { normalizePrinterProfile, SUPVAN_T50_PROFILE, type PrinterProfile, type PrinterProfileInput } from "../protocol/profile";
 import {
   expandPrintPages,
   resolvePrintSettings,
@@ -21,26 +21,35 @@ import {
   type ResolvedPrintSettings,
 } from "../types";
 import { concatBytes, sleep } from "../utils/bytes";
+import type { TimeoutOptions } from "../timeouts";
 
 export interface BlePrinterOptions {
+  timeouts?: Pick<TimeoutOptions, "commandTimeoutMs" | "printTimeoutMs">;
+  autoReadLabelBox?: boolean;
+  /** @deprecated Use timeouts.commandTimeoutMs. */
   commandTimeoutMs?: number;
+  /** @deprecated Use timeouts.printTimeoutMs. */
   printTimeoutMs?: number;
-  profile?: PrinterProfile;
+  profile?: PrinterProfileInput;
 }
 
 export class BlePrinter {
   private readonly commandTimeoutMs: number;
   private readonly printTimeoutMs: number;
   private readonly profile: PrinterProfile;
+  private readonly capabilities: TransportCapabilities;
+  private readonly autoReadLabelBox: boolean;
 
   constructor(
     readonly transport: PrinterTransport,
     options: BlePrinterOptions = {},
   ) {
     if (transport.kind !== "ble") throw new TypeError("BlePrinter 需要 BLE transport");
-    this.commandTimeoutMs = options.commandTimeoutMs ?? 3000;
-    this.printTimeoutMs = options.printTimeoutMs ?? 120000;
-    this.profile = options.profile ?? SUPVAN_T50_PROFILE;
+    this.commandTimeoutMs = options.timeouts?.commandTimeoutMs ?? options.commandTimeoutMs ?? 3000;
+    this.printTimeoutMs = options.timeouts?.printTimeoutMs ?? options.printTimeoutMs ?? 120000;
+    this.profile = normalizePrinterProfile(options.profile ?? SUPVAN_T50_PROFILE);
+    this.capabilities = getTransportCapabilities(transport);
+    this.autoReadLabelBox = options.autoReadLabelBox ?? true;
   }
 
   get connected(): boolean {
@@ -90,8 +99,9 @@ export class BlePrinter {
     return parseBleLabelBox(await this.exchange(buildR1(0x30), 0x30, timeoutMs));
   }
 
-  async stop(): Promise<void> {
+  async stop(): Promise<boolean> {
     await this.exchange(buildR1(0x14), 0x14);
+    return true;
   }
 
   private async sendCompressed(data: Uint8Array): Promise<void> {
@@ -99,7 +109,7 @@ export class BlePrinter {
     await this.exchange(buildR2(0x5c, 512, packets.length), 0x5c);
     for (const packet of packets) {
       await this.transport.write(packet);
-      if (this.transport.bulkAckRequired) {
+      if (this.capabilities.bulkAck === "required") {
         parseBleResponse(await this.readFrame(this.commandTimeoutMs), 0xbb);
       }
     }
@@ -132,32 +142,32 @@ export class BlePrinter {
     );
     await this.exchange(buildR1(0x13), 0x13);
     const afterStart = await this.getStatus();
-    if (!afterStart.ready && !afterStart.printing && !afterStart.busy) {
+    if (!afterStart.ready && !afterStart.flags.printing && !afterStart.flags.busy) {
       throw new DeviceError(afterStart.errorMessage || afterStart.description);
     }
     let firstBatch = true;
     for (const batches of pageBatches) {
       for (const batch of batches) {
-        if (!firstBatch) await this.waitFor((status) => !status.bufferFull, 10000, "打印缓冲区就绪");
+        if (!firstBatch) await this.waitFor((status) => !status.flags.bufferFull, 10000, "打印缓冲区就绪");
         await this.sendCompressed(batch.data);
         firstBatch = false;
       }
     }
-    if (this.transport.printCompletionOnSubmit) return;
+    if (this.capabilities.completion === "submit-confirmed") return;
     const deadline = Date.now() + this.printTimeoutMs;
     let observedPrinting = false;
     let last = initial;
     while (Date.now() < deadline) {
       last = await this.getStatus(Math.max(100, deadline - Date.now()));
-      if (last.state !== 0 && last.state !== 8 && !last.printing && !last.busy) {
+      if (last.state !== 0 && last.state !== 8 && !last.flags.printing && !last.flags.busy) {
         throw new DeviceError(last.description);
       }
-      observedPrinting ||= last.printing || last.busy;
-      if (last.printedPages > initial.printedPages && !last.printing && !last.busy) return;
-      if (observedPrinting && !last.printing && !last.busy) return;
+      observedPrinting ||= last.flags.printing || last.flags.busy;
+      if (last.metrics.printedPages > initial.metrics.printedPages && !last.flags.printing && !last.flags.busy) return;
+      if (observedPrinting && !last.flags.printing && !last.flags.busy) return;
       await sleep(100);
     }
-    throw new CommunicationError(`等待 BLE 实际出纸超时；最后页计数 ${last.printedPages}`);
+    throw new CommunicationError(`等待 BLE 实际出纸超时；最后页计数 ${last.metrics.printedPages}`);
   }
 
   async print(job: PrintJob): Promise<void> {
@@ -165,10 +175,10 @@ export class BlePrinter {
       job.settings?.materialWidth === undefined ||
       job.settings?.materialHeight === undefined ||
       job.settings?.gap === undefined;
-    const labelBox = missingMedia ? await this.readLabelBox() : undefined;
+    const labelBox = missingMedia && this.autoReadLabelBox ? await this.readLabelBox() : undefined;
     const settings = resolvePrintSettings(job.settings, labelBox, this.profile);
     const pages = expandPrintPages({ ...job, settings });
-    if (this.transport.separatePhysicalPages && pages.length > 1) {
+    if (this.capabilities.pageSubmission === "separate" && pages.length > 1) {
       for (const page of pages) await this.printOnce([page], settings);
       return;
     }

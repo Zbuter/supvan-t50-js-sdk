@@ -1,0 +1,28 @@
+<view class="page home-page">
+  <view class="hero">
+    <view class="brand-mark">SF</view>
+    <view>
+      <view class="title">硕方标签工作台</view>
+      <view class="muted">LabelDocument 小程序编辑器</view>
+    </view>
+  </view>
+
+  <view class="card intro-card">
+    <view class="section-title">导入可编辑标签</view>
+    <view class="muted description">从浏览器点击“复制到小程序”，再从这里读取剪贴板。文字、条码、二维码、图片点位和尺寸都会保留。</view>
+    <button class="primary-button" bindtap="importClipboard">从剪贴板导入</button>
+    <button class="secondary-button" bindtap="createBlank">新建空白标签</button>
+    <view wx:if="{{status}}" class="error-message">{{status}}</view>
+  </view>
+
+  <view wx:if="{{recent.length}}" class="recent-section">
+    <view class="section-title">最近标签</view>
+    <view wx:for="{{recent}}" wx:key="id" class="card recent-card" data-index="{{index}}" bindtap="openRecent">
+      <view>
+        <view class="recent-name">{{item.name}}</view>
+        <view class="muted">{{item.document.width}} × {{item.document.height}} mm</view>
+      </view>
+      <view class="recent-arrow">›</view>
+    </view>
+  </view>
+</view>

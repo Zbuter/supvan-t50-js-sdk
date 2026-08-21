@@ -31,6 +31,11 @@ function hidApi(): HidApiLike {
 
 export class WebHidTransport implements PrinterTransport {
   readonly kind = "usb" as const;
+  readonly capabilities = {
+    bulkAck: "none",
+    pageSubmission: "batched",
+    completion: "device-confirmed",
+  } as const;
   private readonly queue = new AsyncByteQueue();
 
   constructor(private readonly device: HidDeviceLike) {}

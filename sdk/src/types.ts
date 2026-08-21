@@ -1,5 +1,10 @@
 import { ValidationError } from "./errors";
-import { SUPVAN_T50_PROFILE, type PrinterProfile } from "./protocol/profile";
+import { expandPageJob, type PageJob, type PageJobSettings } from "./jobs";
+import {
+  normalizePrinterProfile,
+  SUPVAN_T50_PROFILE,
+  type PrinterProfileInput,
+} from "./protocol/profile";
 
 export enum PaperType {
   Gap = 1,
@@ -28,11 +33,16 @@ export interface RasterPage {
   repeat?: number;
 }
 
-export interface PrintSettings {
+export type PrintDirection = 0 | 1 | 2 | 3;
+
+export interface PrintSettings extends PageJobSettings {
   materialWidth?: number;
   materialHeight?: number;
   copies?: number;
-  rotate?: 0 | 1 | 2 | 3 | 4;
+  /** Shared BLE/USB direction code: 0 = 0°, 1 = 180°, 2 = 270°, 3 = 90°. */
+  direction?: PrintDirection;
+  /** @deprecated Use direction. Kept as a compatibility alias for BLE callers. */
+  rotate?: PrintDirection | 4;
   density?: number;
   horizontalOffset?: number;
   verticalOffset?: number;
@@ -40,10 +50,14 @@ export interface PrintSettings {
   gap?: number;
   oneByOne?: boolean;
   tailLength?: number;
-  direction?: 0 | 1 | 2 | 3;
   speed?: number;
+  /** Optional page-width override; it cannot exceed materialWidth * dotsPerMm. */
+  maxWidthDots?: number;
+  /** @deprecated Use maxWidthDots. */
   maxDotValue?: number;
-  /** Protocol dots per millimeter. Python SDK calls this field dpi; T50 uses 8.0. */
+  /** Protocol dots per millimeter. */
+  dotsPerMm?: number;
+  /** @deprecated Use dotsPerMm. */
   dpi?: number;
 }
 
@@ -51,7 +65,7 @@ export interface ResolvedPrintSettings {
   materialWidth: number;
   materialHeight: number;
   copies: number;
-  rotate: 0 | 1 | 2 | 3 | 4;
+  direction: PrintDirection;
   density: number;
   horizontalOffset: number;
   verticalOffset: number;
@@ -59,17 +73,13 @@ export interface ResolvedPrintSettings {
   gap: number;
   oneByOne: boolean;
   tailLength: number;
-  direction: 0 | 1 | 2 | 3;
   speed: number;
-  maxDotValue: number;
+  maxWidthDots: number;
   /** Protocol dots per millimeter. */
-  dpi: number;
+  dotsPerMm: number;
 }
 
-export interface PrintJob {
-  pages: RasterPage[];
-  settings?: PrintSettings;
-}
+export type PrintJob = PageJob<RasterPage, PrintSettings>;
 
 export interface LabelBoxInfo {
   uuidHex: string;
@@ -88,16 +98,7 @@ export interface LabelBoxInfo {
   raw: Uint8Array;
 }
 
-export interface PrinterStatus {
-  state: PrinterState;
-  description: string;
-  errorMessage: string;
-  printedPages: number;
-  totalPages: number;
-  raw: Uint8Array;
-  rawFlags: Uint8Array;
-  temperatureC?: number;
-  voltageV?: number;
+export interface PrinterStatusFlags {
   bufferFull: boolean;
   headOverheat: boolean;
   labelReadWriteError: boolean;
@@ -114,14 +115,74 @@ export interface PrinterStatus {
   secondDeviceBusy: boolean;
   labelNotInstalled: boolean;
   charging: boolean;
+}
+
+export interface PrinterMetrics {
+  printedPages: number;
+  totalPages: number;
+  temperatureC?: number;
+  voltageV?: number;
+}
+
+export interface PrinterStatus {
+  state: PrinterState;
+  flags: PrinterStatusFlags;
+  metrics: PrinterMetrics;
+  /** @deprecated Use state, flags and metrics; localize status text in the UI. */
+  description: string;
+  /** @deprecated Use state and flags to build an application-specific message. */
+  errorMessage: string;
+  /** @deprecated Read metrics.printedPages. */
+  printedPages: number;
+  /** @deprecated Read metrics.totalPages. */
+  totalPages: number;
+  raw: Uint8Array;
+  rawFlags: Uint8Array;
+  /** @deprecated Read metrics.temperatureC. */
+  temperatureC?: number;
+  /** @deprecated Read metrics.voltageV. */
+  voltageV?: number;
+  /** @deprecated Read flags.bufferFull. */
+  bufferFull: boolean;
+  /** @deprecated Read flags.headOverheat. */
+  headOverheat: boolean;
+  /** @deprecated Read flags.labelReadWriteError. */
+  labelReadWriteError: boolean;
+  /** @deprecated Read flags.mediaNotDetected. */
+  mediaNotDetected: boolean;
+  /** @deprecated Read flags.mediaLow. */
+  mediaLow: boolean;
+  /** @deprecated Read flags.mediaEmpty. */
+  mediaEmpty: boolean;
+  /** @deprecated Read flags.mediaUnrecognized. */
+  mediaUnrecognized: boolean;
+  /** @deprecated Read flags.mediaNotInstalled. */
+  mediaNotInstalled: boolean;
+  /** @deprecated Read flags.batteryLow. */
+  batteryLow: boolean;
+  /** @deprecated Read flags.busy. */
+  busy: boolean;
+  /** @deprecated Read flags.coverOpen. */
+  coverOpen: boolean;
+  /** @deprecated Read flags.usbInserted. */
+  usbInserted: boolean;
+  /** @deprecated Read flags.printing. */
+  printing: boolean;
+  /** @deprecated Read flags.secondDeviceBusy. */
+  secondDeviceBusy: boolean;
+  /** @deprecated Read flags.labelNotInstalled. */
+  labelNotInstalled: boolean;
+  /** @deprecated Read flags.charging. */
+  charging: boolean;
+  /** @deprecated Use state and flags. */
   ready: boolean;
 }
 
-const DEFAULT_SETTINGS: ResolvedPrintSettings = {
+const DEFAULT_SETTINGS: Omit<ResolvedPrintSettings, "maxWidthDots"> = {
   materialWidth: 48,
   materialHeight: 30,
   copies: 1,
-  rotate: 0,
+  direction: 0,
   density: 4,
   horizontalOffset: 0,
   verticalOffset: 0,
@@ -129,11 +190,13 @@ const DEFAULT_SETTINGS: ResolvedPrintSettings = {
   gap: 3,
   oneByOne: true,
   tailLength: 0,
-  direction: 0,
   speed: 40,
-  maxDotValue: SUPVAN_T50_PROFILE.maxWidthDots,
-  dpi: SUPVAN_T50_PROFILE.dpi,
+  dotsPerMm: SUPVAN_T50_PROFILE.dotsPerMm,
 };
+
+const PRINT_DIRECTIONS = [0, 1, 2, 3] as const;
+const LEGACY_ROTATIONS = [0, 1, 2, 3, 4] as const;
+const LEGACY_ROTATE_TO_DIRECTION: readonly PrintDirection[] = [0, 3, 1, 2, 0];
 
 function inRange(value: number, min: number, max: number, name: string): void {
   if (!Number.isFinite(value) || value < min || value > max) {
@@ -144,34 +207,70 @@ function inRange(value: number, min: number, max: number, name: string): void {
 export function resolvePrintSettings(
   settings: PrintSettings = {},
   labelBox?: LabelBoxInfo,
-  profile: PrinterProfile = SUPVAN_T50_PROFILE,
+  profile: PrinterProfileInput = SUPVAN_T50_PROFILE,
 ): ResolvedPrintSettings {
+  const {
+    direction: requestedDirection,
+    rotate,
+    maxWidthDots: requestedMaxWidthDots,
+    maxDotValue: legacyMaxDotValue,
+    dotsPerMm: requestedDotsPerMm,
+    dpi: legacyDpi,
+    ...sharedSettings
+  } = settings;
+  const resolvedProfile = normalizePrinterProfile(profile);
+  if (requestedDirection !== undefined && !PRINT_DIRECTIONS.includes(requestedDirection)) {
+    throw new ValidationError("direction 必须是 0-3");
+  }
+  if (
+    requestedMaxWidthDots !== undefined &&
+    legacyMaxDotValue !== undefined &&
+    requestedMaxWidthDots !== legacyMaxDotValue
+  ) {
+    throw new ValidationError("maxWidthDots 与旧 maxDotValue 不一致");
+  }
+  if (requestedDotsPerMm !== undefined && legacyDpi !== undefined && requestedDotsPerMm !== legacyDpi) {
+    throw new ValidationError("dotsPerMm 与旧 dpi 不一致");
+  }
+  if (rotate !== undefined && !LEGACY_ROTATIONS.includes(rotate)) {
+    throw new ValidationError("rotate 必须是 0-4");
+  }
+  const legacyDirection = rotate === undefined ? undefined : LEGACY_ROTATE_TO_DIRECTION[rotate];
+  if (requestedDirection !== undefined && legacyDirection !== undefined && requestedDirection !== legacyDirection) {
+    throw new ValidationError("direction 与旧 rotate 不一致");
+  }
+  const direction = requestedDirection ?? legacyDirection ?? DEFAULT_SETTINGS.direction;
+  const materialWidth = settings.materialWidth ?? labelBox?.width ?? DEFAULT_SETTINGS.materialWidth;
+  const materialHeight = settings.materialHeight ?? labelBox?.height ?? DEFAULT_SETTINGS.materialHeight;
+  const gap = settings.gap ?? labelBox?.gap ?? DEFAULT_SETTINGS.gap;
+  const dotsPerMm = requestedDotsPerMm ?? legacyDpi ?? resolvedProfile.dotsPerMm;
+  inRange(materialWidth, 1, 50, "标签宽度");
+  inRange(materialHeight, 1, 120, "标签高度");
+  inRange(dotsPerMm, 0.1, 32, "点/mm 点密度");
+  const pageWidthDots = Math.max(1, Math.round(materialWidth * dotsPerMm));
+  const requestedWidthDots = requestedMaxWidthDots ?? legacyMaxDotValue;
+  if (requestedWidthDots !== undefined && requestedWidthDots > pageWidthDots) {
+    throw new ValidationError(
+      `maxWidthDots 不能超过当前页面宽度 ${pageWidthDots} 点（${materialWidth}mm × ${dotsPerMm} 点/mm）`,
+    );
+  }
   const result: ResolvedPrintSettings = {
     ...DEFAULT_SETTINGS,
-    ...settings,
-    maxDotValue: settings.maxDotValue ?? profile.maxWidthDots,
-    dpi: settings.dpi ?? profile.dpi,
-    materialWidth: settings.materialWidth ?? labelBox?.width ?? DEFAULT_SETTINGS.materialWidth,
-    materialHeight:
-      settings.materialHeight ?? labelBox?.height ?? DEFAULT_SETTINGS.materialHeight,
-    gap: settings.gap ?? labelBox?.gap ?? DEFAULT_SETTINGS.gap,
+    ...sharedSettings,
+    direction,
+    maxWidthDots: requestedWidthDots ?? pageWidthDots,
+    dotsPerMm,
+    materialWidth,
+    materialHeight,
+    gap,
   };
-  inRange(result.materialWidth, 1, 50, "标签宽度");
-  inRange(result.materialHeight, 1, 120, "标签高度");
   inRange(result.copies, 1, 99, "打印份数");
   inRange(result.density, 0, 9, "打印浓度");
   inRange(result.gap, 0, 8, "标签间隙");
   inRange(result.speed, 20, 60, "打印速度");
   inRange(result.horizontalOffset, -9, 9, "水平偏移");
   inRange(result.verticalOffset, -9, 9, "垂直偏移");
-  inRange(result.maxDotValue, 1, 384, "最大打印点数");
-  inRange(result.dpi, 0.1, 32, "DPI 点密度");
-  if (![0, 1, 2, 3, 4].includes(result.rotate)) {
-    throw new ValidationError("rotate 必须是 0-4");
-  }
-  if (![0, 1, 2, 3].includes(result.direction)) {
-    throw new ValidationError("direction 必须是 0-3");
-  }
+  inRange(result.maxWidthDots, 1, pageWidthDots, "当前页面最大打印点数");
   if (![PaperType.Gap, PaperType.BlackMark, PaperType.BlackMarkCard].includes(result.paperType)) {
     throw new ValidationError("不支持的标签纸类型");
   }
@@ -179,35 +278,20 @@ export function resolvePrintSettings(
 }
 
 export function expandPrintPages(job: PrintJob): RasterPage[] {
-  if (job.pages.length === 0) {
-    throw new ValidationError("打印任务至少需要一页");
-  }
   const settings = resolvePrintSettings(job.settings);
-  const repeated = job.pages.map((page) => ({ page, repeat: page.repeat ?? 1 }));
-  repeated.forEach(({ page, repeat }) => {
+  return expandPageJob({ ...job, settings }, {
+    taskName: "打印任务",
+    validatePage: (page) => {
     if (!Number.isInteger(page.width) || !Number.isInteger(page.height) || page.width <= 0 || page.height <= 0) {
       throw new ValidationError("栅格页宽高必须是正整数");
-    }
-    if (!Number.isInteger(repeat) || repeat < 1) {
-      throw new ValidationError("页面 repeat 必须是正整数");
     }
     const expectedGray = page.width * page.height;
     if (page.data.length !== expectedGray && page.data.length !== expectedGray * 4) {
       throw new ValidationError("栅格页像素长度与宽高不匹配");
     }
+    },
   });
-
-  const result: RasterPage[] = [];
-  if (settings.oneByOne) {
-    for (let copy = 0; copy < settings.copies; copy += 1) {
-      for (const { page, repeat } of repeated) {
-        for (let index = 0; index < repeat; index += 1) result.push(page);
-      }
-    }
-  } else {
-    for (const { page, repeat } of repeated) {
-      for (let index = 0; index < repeat * settings.copies; index += 1) result.push(page);
-    }
-  }
-  return result;
 }
+
+export { expandPageJob } from "./jobs";
+export type { PageJob, PageJobSettings, RepeatablePage } from "./jobs";

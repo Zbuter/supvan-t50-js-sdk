@@ -1,0 +1,15 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/editor/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "硕方标签",
+    "navigationBarBackgroundColor": "#f5f7f6",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f5f7f6",
+    "backgroundTextStyle": "light"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

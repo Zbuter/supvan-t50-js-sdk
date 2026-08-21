@@ -1,6 +1,8 @@
 # 硕方协议实现说明
 
-本文记录 JavaScript 实现必须保持的 T50 协议行为，便于以后更换压缩库、transport 或重构栅格代码时做回归检查。需要对照的 Python 参考实现位于 [supvan-t50-python-sdk](https://github.com/Zbuter/supvan-t50-python-sdk)，不在本仓库内。
+本文记录 JavaScript 实现必须保持的 T50 协议行为，便于以后更换压缩库、transport 或重构栅格代码时做回归检查。需要对照的外部参考实现位于 [supvan-t50-python-sdk](https://github.com/Zbuter/supvan-t50-python-sdk)，不在本仓库内。
+
+协议构造和解析函数从 `shuofang-t50-sdk/protocol` 导出；LZMA、栅格和字节工具从 `shuofang-t50-sdk/internal` 导出。普通打印代码应使用 `shuofang-t50-sdk` 或 `/browser` 的高层 API。
 
 ## 分层
 
@@ -13,7 +15,9 @@ RasterPage
   -> runtime transport
 ```
 
-BLE 和 USB 共用打印任务类型、状态模型和 4096 字节逻辑帧概念，但位图方向、帧头和传输方式不同。不要把两个 raster 函数合并为同一套镜像/旋转逻辑。
+BLE 和 USB 共用打印任务类型、状态模型、公共 `PrintSettings.direction` 和 4096 字节逻辑帧概念，但位图布局、帧头和传输方式不同。不要把两个 raster 函数合并为同一套镜像/旋转逻辑。
+
+公共方向编码保持 T50 协议语义：`0 = 0°`、`1 = 180°`、`2 = 270°`、`3 = 90°`（顺时针）。两个协议在进入各自帧格式前使用同一方向编码，再执行各自的镜像或列/行布局转换。
 
 ## LZMA-Alone
 
@@ -56,14 +60,14 @@ BLE 图像帧使用 LZMA-Alone，而不是 `.xz` 容器。编码参数：
 | 数据写/通知 | `0000ffe1-0000-1000-8000-00805f9b34fb` |
 | 批量通知（可选） | `0000ffea-0000-1000-8000-00805f9b34fb` |
 
-浏览器和小程序 transport 在 BLE 层按 MTU 友好的小块写入；协议层仍接收完整逻辑 payload。
+浏览器 transport 在 BLE 层按 MTU 友好的小块写入；协议层仍接收完整逻辑 payload。
 
 ### 栅格
 
-1. 按型号配置建立宽 `maxDotValue` 点、高 `materialHeight * dpi` 点的白色工作区。
-2. 按设置旋转并居中，应用水平/垂直偏移；源图超过型号点宽时直接拒绝，不自动缩放。
+1. 先按 `materialWidth * dotsPerMm` 计算页面宽度；未显式设置时，`maxWidthDots` 使用该页面宽度，显式设置时只能更小。再建立宽 `maxWidthDots` 点、高 `materialHeight * dotsPerMm` 点的白色工作区。
+2. 按公共 `direction` 旋转并居中，应用水平/垂直偏移；源图超过当前页面点宽时直接拒绝，不自动缩放。
 3. 转为最终传输方向（相对源图逆时针 90 度）。
-4. 每列打包 48 字节，黑点为 1。
+4. 每列按当前页面宽度打包 `ceil(maxWidthDots / 8)` 字节，黑点为 1。
 5. 每个逻辑帧固定 4096 字节，外层标记为 `7E 5A`。
 
 单页最多拆成若干逻辑帧，每个 LZMA 批次最多包含 4 帧。压缩数据再封装为 `AA BB` 包，内层数据最多 500 字节，外层固定 512 字节。
@@ -80,13 +84,13 @@ BLE 图像帧使用 LZMA-Alone，而不是 `.xz` 容器。编码参数：
   -> 轮询实际打印完成
 ```
 
-缺少标签尺寸或间隙时，先读取标签盒 `0x30`。Web Bluetooth 与微信小程序 transport 将多页拆成独立物理任务，以适配浏览器 BLE 写入节奏。
+缺少标签尺寸或间隙时，先读取标签盒 `0x30`。Web Bluetooth transport 将多页拆成独立物理任务，以适配浏览器 BLE 写入节奏。
 
 ## USB HID
 
 ### 栅格
 
-1. 按型号的 `maxDotValue`（T50 默认 384 点）建立目标宽度并居中；源图超过该宽度时直接拒绝，不自动缩放。
+1. 按公共 `direction` 旋转后，以解析得到的 `maxWidthDots` 建立目标宽度并居中；省略该参数时使用 `round(materialWidth * dotsPerMm)`，源图超过该宽度时直接拒绝，不自动缩放。
 2. 水平镜像。
 3. 按行、低位优先打包黑点。
 4. 每个逻辑帧固定 4096 字节。
@@ -127,9 +131,9 @@ T50 的 USB 接口是 HID class，浏览器统一使用 WebHID。
 
 ## 状态与错误
 
-打印机返回值统一解析为 `PrinterStatus`。调用方通常只需要处理：
+打印机返回值统一解析为 `PrinterStatus`，稳定字段是 `state`、`flags`、`metrics` 和原始响应；扁平状态字段只作为兼容返回值。调用方通常只需要处理：
 
-- `CapabilityError`：运行时没有需要的浏览器/小程序能力
+- `CapabilityError`：运行时没有需要的浏览器能力
 - `CommunicationError`：连接、短读、帧或超时问题
 - `DeviceError`：开盖、无纸、介质不识别、打印任务异常终止等设备状态
 - `ValidationError`：尺寸、像素长度、LZMA 头或参数不合法
@@ -143,7 +147,7 @@ T50 的 USB 接口是 HID class，浏览器统一使用 WebHID。
 ```bash
 npm run typecheck
 npm test
-npm run build --workspace shuofang-t50-sdk
+npm run build
 ```
 
 其中 `tests/lzma.test.ts` 是压缩兼容性的硬门槛；仅检查 `dict_size` 或前 5 字节不足以证明编码流与参考实现一致。

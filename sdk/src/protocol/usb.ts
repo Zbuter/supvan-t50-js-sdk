@@ -1,4 +1,9 @@
-import { FRAME_SIZE, HID_REPORT_SIZE, USB_FRAME_DATA_SIZE } from "../constants";
+import {
+  FRAME_SIZE,
+  HID_REPORT_SIZE,
+  PRINT_DIRECTION_TURNS,
+  USB_FRAME_DATA_SIZE,
+} from "../constants";
 import { lzmaCompressFrames } from "../compression/lzma";
 import { CommunicationError, ValidationError } from "../errors";
 import {
@@ -71,15 +76,15 @@ export function parseUsbStatus(data: Uint8Array, totalPages = 0): PrinterStatus 
 
 export function prepareUsbRaster(page: RasterPage, settings: ResolvedPrintSettings): GrayRaster {
   let source = toGrayscale(page);
-  const directionTurns = [0, 2, 3, 1][settings.direction] ?? 0;
+  const directionTurns = PRINT_DIRECTION_TURNS[settings.direction];
   source = rotateRaster(source, directionTurns);
-  if (source.width > settings.maxDotValue) {
+  if (source.width > settings.maxWidthDots) {
     throw new ValidationError(
-      `图像宽度 ${source.width} 点超过当前型号最大打印宽度 ${settings.maxDotValue} 点；协议不会自动缩放`,
+      `图像宽度 ${source.width} 点超过当前页面打印宽度 ${settings.maxWidthDots} 点；协议不会自动缩放`,
     );
   }
-  const target = createGrayRaster(settings.maxDotValue, source.height);
-  const left = Math.floor((settings.maxDotValue - source.width) / 2) + settings.horizontalOffset;
+  const target = createGrayRaster(settings.maxWidthDots, source.height);
+  const left = Math.floor((settings.maxWidthDots - source.width) / 2) + settings.horizontalOffset;
   pasteRaster(target, source, left, settings.verticalOffset);
   return mirrorRaster(target);
 }

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  LZMA_DICTIONARY_SIZE,
   assertSupvanLzmaHeader,
   inspectLzmaHeader,
   lzmaCompress,
-} from "../src";
-import { toHex } from "../src/utils/bytes";
+} from "../src/internal";
+import { LZMA_DICTIONARY_SIZE } from "../src/protocol";
+import { toHex } from "../src/internal";
 
 describe("SUPVAN LZMA-Alone compatibility", () => {
   it("matches the Python SDK byte-for-byte for the reference frame", () => {

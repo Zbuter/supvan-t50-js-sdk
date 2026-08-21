@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { BLE_UUIDS, WebBluetoothTransport } from "../src";
+import { BLE_UUIDS } from "../src/protocol";
+import { WebBluetoothTransport } from "../src/transports/web-bluetooth";
 
 class MockCharacteristic extends EventTarget {
   value?: DataView;
