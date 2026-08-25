@@ -5,6 +5,7 @@ const {
   clone,
   createDocument,
   createObject,
+  isUntitledName,
   roundMm,
   validateDocument,
 } = require("../../core/document");
@@ -20,7 +21,7 @@ const {
 const { MAX_PAGES, createWorkspace, validateWorkspace } = require("../../core/workspace");
 const { isDevtoolsEnvironment, readNavigationMetrics } = require("../../core/navigation");
 const { CanvasRenderer, rasterizeDocument } = require("../../core/renderer");
-const { getTemplate, listTemplates } = require("../../core/templates");
+const { createBlank, getTemplate, listTemplates } = require("../../core/templates");
 const { chooseAndConvertImage, convertDocumentImagesToBitmaps } = require("../../services/image-import");
 const { getPrinterService } = require("../../services/printer-service");
 const storage = require("../../services/storage");
@@ -96,7 +97,7 @@ Page({
     menuRightInset: 16,
     navigationHeight: 72,
     devtoolsCanvasWorkaround: false,
-    documentName: "未命名标签",
+    documentName: "未命名",
     sizeLabel: "40 × 30 mm",
     objectCount: 0,
     pageCount: 1,
@@ -146,7 +147,7 @@ Page({
       ...readNavigationMetrics(wx),
       devtoolsCanvasWorkaround: isDevtoolsEnvironment(wx),
     });
-    const workspace = storage.takePendingWorkspace() || storage.loadWorkingWorkspace() || validateWorkspace(getTemplate("blank-40x30"));
+    const workspace = storage.takePendingWorkspace() || storage.loadWorkingWorkspace() || validateWorkspace(createBlank(40, 30));
     this.workspaceId = workspace.workspaceId;
     this.pages = workspace.pages;
     this.activePageIndex = workspace.activePageIndex;
@@ -254,7 +255,7 @@ Page({
       details: [],
     };
     this.setData({
-      documentName: document.name || "未命名标签",
+      documentName: document.name || "未命名",
       sizeLabel: `${document.width} × ${document.height} mm`,
       objectCount: document.objects.length,
       pageCount: this.pages.length,
@@ -537,7 +538,26 @@ Page({
     }
   },
 
-  saveDraft() {
+  async saveDraft() {
+    let name = String(this.engine.document.name || "").trim();
+    if (isUntitledName(name)) {
+      const result = await callWx("showModal", {
+        title: "保存标签",
+        content: "",
+        editable: true,
+        placeholderText: "请输入标签名称",
+        confirmText: "保存",
+      });
+      if (!result.confirm) return;
+      name = String(result.content || "").trim();
+      if (isUntitledName(name)) return toast("请先输入一个便于识别的标签名称");
+      this.engine.commit(() => {
+        this.engine.document.name = name;
+      });
+      this.persistCurrentPage();
+      this.pages = this.pages.map((page) => ({ ...clone(page), name }));
+      this.syncView(true);
+    }
     const draft = storage.saveDraft(this.workspaceSnapshot());
     toast(`已保存：${draft.name}`);
   },
@@ -913,7 +933,7 @@ Page({
     if (!Number.isFinite(width) || width < 1 || width > 50 || !Number.isFinite(height) || height < 1 || height > 120) {
       return toast("宽度需为 1–50 mm，高度需为 1–120 mm");
     }
-    const name = this.data.documentName.trim() || "未命名标签";
+    const name = this.data.documentName.trim() || "未命名";
     this.engine.commit(() => resizeDocument(this.engine.document, width, height, this.data.scaleOnResize, name));
     this.persistCurrentPage();
     this.pages = this.pages.map((page, index) => index === this.activePageIndex

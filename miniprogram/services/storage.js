@@ -28,7 +28,7 @@ function workingItem(value, updatedAt = Date.now()) {
   const document = activeDocument(workspace);
   return {
     id: workspace.workspaceId,
-    name: document.name || "未命名标签",
+    name: document.name || "未命名",
     size: `${document.width} × ${document.height} mm`,
     pageCount: workspace.pages.length,
     objectCount: workspace.pages.reduce((total, page) => total + page.objects.length, 0),
@@ -129,7 +129,7 @@ function saveDraft(value) {
   const id = workspace.workspaceId || `draft-${now.toString(36)}`;
   const item = {
     id,
-    name: document.name || "未命名标签",
+    name: document.name || "未命名",
     size: `${document.width} × ${document.height} mm`,
     pageCount: workspace.pages.length,
     updatedAt: now,

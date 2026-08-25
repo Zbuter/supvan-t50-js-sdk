@@ -6,7 +6,7 @@ const TEMPLATES = [
     name: "空白标签",
     description: "40 × 30 mm，自由添加内容",
     tone: "mint",
-    document: createDocument(40, 30, [], { name: "空白标签" }),
+    document: createDocument(40, 30, [], { name: "未命名" }),
   },
   {
     id: "storage-40x30",
@@ -60,7 +60,7 @@ function getTemplate(id) {
 }
 
 function createBlank(width, height) {
-  return createDocument(Number(width), Number(height), [], { name: `空白 ${width}×${height}` });
+  return createDocument(Number(width), Number(height), [], { name: "未命名" });
 }
 
 module.exports = { createBlank, getTemplate, listTemplates };

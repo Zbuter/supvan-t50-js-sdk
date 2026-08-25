@@ -21,7 +21,7 @@
 
   <view class="section" wx:if="{{working}}">
     <view class="section-header">
-      <view class="section-title">继续编辑</view>
+      <view class="section-title">最近编辑</view>
       <view class="section-caption">自动保存</view>
     </view>
     <button class="working-card" bindtap="continueWorking">

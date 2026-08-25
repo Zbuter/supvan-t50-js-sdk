@@ -6,6 +6,7 @@ const {
   createDocument,
   createObject,
   duplicateObject,
+  isUntitledName,
   parseDocument,
   serializeDocument,
 } = require("../core/document");
@@ -35,4 +36,12 @@ test("all built-in templates are independent editable documents", () => {
   const second = getTemplate("coffee-40x30");
   first.objects[0].text = "已修改";
   assert.notEqual(first.objects[0].text, second.objects[0].text);
+});
+
+test("recognizes default untitled names but keeps user names", () => {
+  assert.equal(isUntitledName("未命名"), true);
+  assert.equal(isUntitledName("未命名标签"), true);
+  assert.equal(isUntitledName("空白标签"), true);
+  assert.equal(isUntitledName("空白 40×30"), true);
+  assert.equal(isUntitledName("仓库货架"), false);
 });

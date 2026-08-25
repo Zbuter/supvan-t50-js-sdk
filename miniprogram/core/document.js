@@ -26,6 +26,14 @@ function normalizeAngle(value) {
   return roundMm(((angle % 360) + 360) % 360);
 }
 
+function isUntitledName(value) {
+  const name = String(value || "").trim();
+  return !name
+    || name === "未命名"
+    || name === "未命名标签"
+    || /^空白(?:标签|\s*\d+(?:\.\d+)?\s*[×xX]\s*\d+(?:\.\d+)?)$/.test(name);
+}
+
 function createId(prefix = "object") {
   idSequence = (idSequence + 1) % 100000;
   return `${prefix}-${Date.now().toString(36)}-${idSequence.toString(36)}`;
@@ -84,7 +92,7 @@ function createDocument(width = 40, height = 30, objects = [], options = {}) {
     width: roundMm(width),
     height: roundMm(height),
     objects: clone(objects),
-    name: options.name || "未命名标签",
+    name: options.name || "未命名",
     print: {
       copies: 1,
       density: 4,
@@ -212,6 +220,7 @@ module.exports = {
   createObject,
   duplicateObject,
   findObject,
+  isUntitledName,
   parseDocument,
   normalizeAngle,
   removeObject,

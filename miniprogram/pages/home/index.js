@@ -42,7 +42,7 @@ Page({
     this.setData({
       drafts,
       working: document ? {
-        name: document.name || "未命名标签",
+        name: document.name || "未命名",
         size: `${document.width} × ${document.height} mm`,
         objectCount: workspace.pages.reduce((total, page) => total + page.objects.length, 0),
         pageCount: workspace.pages.length,
