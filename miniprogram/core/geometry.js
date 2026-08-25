@@ -46,6 +46,24 @@ function objectCorners(object) {
   ].map((point) => rotatePoint(point, center, radians));
 }
 
+function objectBounds(object) {
+  const corners = objectCorners(object);
+  const left = Math.min(...corners.map((point) => point.x));
+  const top = Math.min(...corners.map((point) => point.y));
+  const right = Math.max(...corners.map((point) => point.x));
+  const bottom = Math.max(...corners.map((point) => point.y));
+  return {
+    left,
+    top,
+    right,
+    bottom,
+    width: right - left,
+    height: bottom - top,
+    centerX: (left + right) / 2,
+    centerY: (top + bottom) / 2,
+  };
+}
+
 function resizeHandle(object) {
   return objectCorners(object)[2];
 }
@@ -118,6 +136,7 @@ module.exports = {
   localPoint,
   nearPoint,
   objectCenter,
+  objectBounds,
   objectCorners,
   pointInObject,
   resizeHandle,

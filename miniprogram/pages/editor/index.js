@@ -3,11 +3,13 @@ const {
   addObject,
   clampObject,
   clone,
+  createDocument,
   createObject,
   roundMm,
   validateDocument,
 } = require("../../core/document");
 const {
+  computeViewport,
   hitTest,
   localPoint,
   nearPoint,
@@ -15,6 +17,8 @@ const {
   resizeHandle,
   screenToDocument,
 } = require("../../core/geometry");
+const { MAX_PAGES, createWorkspace, validateWorkspace } = require("../../core/workspace");
+const { readNavigationMetrics } = require("../../core/navigation");
 const { CanvasRenderer, rasterizeDocument } = require("../../core/renderer");
 const { getTemplate, listTemplates } = require("../../core/templates");
 const { chooseAndConvertImage, convertDocumentImagesToBitmaps } = require("../../services/image-import");
@@ -41,6 +45,17 @@ const DIRECTION_OPTIONS = [
   { label: "270°", value: 2 },
   { label: "90°", value: 3 },
 ];
+const SPEED_OPTIONS = [20, 25, 30, 35, 40, 45, 50, 55, 60];
+const FONT_FAMILIES = ["sans-serif", "Microsoft YaHei", "SimHei", "Arial", "serif", "monospace"];
+const LABEL_SIZE_PRESETS = [
+  { label: "30 × 20", width: 30, height: 20 },
+  { label: "40 × 30", width: 40, height: 30 },
+  { label: "50 × 30", width: 50, height: 30 },
+  { label: "50 × 40", width: 50, height: 40 },
+  { label: "40 × 60", width: 40, height: 60 },
+  { label: "50 × 70", width: 50, height: 70 },
+  { label: "50 × 80", width: 50, height: 80 },
+];
 
 function callWx(name, options = {}) {
   return new Promise((resolve, reject) => wx[name]({ ...options, success: resolve, fail: reject }));
@@ -55,12 +70,37 @@ function numberOr(value, fallback) {
   return Number.isFinite(number) ? number : fallback;
 }
 
+function resizeDocument(document, width, height, scaleObjects, name) {
+  const scaleX = width / document.width;
+  const scaleY = height / document.height;
+  document.name = name;
+  if (scaleObjects) {
+    document.objects.forEach((object) => {
+      object.x *= scaleX;
+      object.y *= scaleY;
+      object.width *= scaleX;
+      object.height *= scaleY;
+      if (object.type === "text") object.fontSize *= Math.min(scaleX, scaleY);
+    });
+  }
+  document.width = roundMm(width);
+  document.height = roundMm(height);
+  document.objects.forEach((object) => clampObject(document, object));
+  validateDocument(document);
+  return document;
+}
+
 Page({
   data: {
     statusBarHeight: 24,
+    menuRightInset: 16,
+    navigationHeight: 72,
     documentName: "未命名标签",
     sizeLabel: "40 × 30 mm",
     objectCount: 0,
+    pageCount: 1,
+    activePageNumber: 1,
+    pages: [],
     selected: false,
     selectedType: "",
     selectedTypeName: "未选择对象",
@@ -70,6 +110,8 @@ Page({
     nudgeIndex: 0,
     nudgeLabel: "微调",
     nudgeActive: false,
+    zoomPercent: 100,
+    viewZoomed: false,
     activeSheet: "",
     propertyForm: {},
     templates: [],
@@ -80,27 +122,37 @@ Page({
     scanning: false,
     deviceBusy: false,
     deviceConnected: false,
+    deviceReady: false,
     deviceName: "未连接",
     deviceStatus: "点击连接打印机",
+    deviceDetails: [],
     printCopies: 1,
     printDensity: 4,
     printGap: 3,
+    printSpeed: 40,
+    printSpeedIndex: 4,
     printDirectionIndex: 0,
     directionOptions: DIRECTION_OPTIONS,
+    speedOptions: SPEED_OPTIONS,
+    fontFamilies: FONT_FAMILIES,
+    labelSizePresets: LABEL_SIZE_PRESETS,
     qrLevels: ["L", "M", "Q", "H"],
     printing: false,
   },
 
   onLoad() {
-    try {
-      this.setData({ statusBarHeight: wx.getWindowInfo().statusBarHeight || 24 });
-    } catch (_error) {}
-    const document = storage.takePending() || storage.loadWorking() || getTemplate("blank-40x30");
-    this.engine = new EditorEngine(document);
+    this.setData(readNavigationMetrics(wx));
+    const workspace = storage.takePendingWorkspace() || storage.loadWorkingWorkspace() || validateWorkspace(getTemplate("blank-40x30"));
+    this.workspaceId = workspace.workspaceId;
+    this.pages = workspace.pages;
+    this.activePageIndex = workspace.activePageIndex;
+    this.engine = new EditorEngine(this.pages[this.activePageIndex]);
     this.printerService = getPrinterService();
     this.renderer = null;
     this.canvasRect = null;
     this.gesture = null;
+    this.viewGesture = null;
+    this.view = { zoom: 1, panX: 0, panY: 0 };
     this.guides = {};
     this.lastTap = { id: null, time: 0 };
     this.discoveryTimer = null;
@@ -119,13 +171,13 @@ Page({
   },
 
   onHide() {
-    if (this.engine) storage.saveWorking(this.engine.document);
+    if (this.engine) this.saveWorking();
   },
 
   onUnload() {
     if (this.discoveryTimer) clearTimeout(this.discoveryTimer);
     if (this.printerService) this.printerService.stopScan().catch(() => {});
-    if (this.engine) storage.saveWorking(this.engine.document);
+    if (this.engine) this.saveWorking();
   },
 
   initCanvas() {
@@ -150,7 +202,39 @@ Page({
     this.renderer.render(this.engine.document, {
       selectedId: this.engine.selectedId,
       guides: this.guides,
+      zoom: this.view.zoom,
+      panX: this.view.panX,
+      panY: this.view.panY,
     });
+  },
+
+  persistCurrentPage() {
+    if (!this.engine || !this.pages) return;
+    this.pages[this.activePageIndex] = clone(this.engine.document);
+  },
+
+  workspaceSnapshot() {
+    this.persistCurrentPage();
+    return validateWorkspace({
+      workspaceVersion: 1,
+      workspaceId: this.workspaceId,
+      activePageIndex: this.activePageIndex,
+      pages: this.pages,
+    });
+  },
+
+  saveWorking() {
+    storage.saveWorkingWorkspace(this.workspaceSnapshot());
+  },
+
+  pageModels() {
+    return this.pages.map((page, index) => ({
+      index,
+      number: index + 1,
+      name: `第 ${index + 1} 页`,
+      objectCount: index === this.activePageIndex ? this.engine.document.objects.length : page.objects.length,
+      active: index === this.activePageIndex,
+    }));
   },
 
   syncView(save = true) {
@@ -160,13 +244,18 @@ Page({
     const nudgeStep = NUDGE_STEPS[nudgeIndex];
     const printer = this.printerService ? this.printerService.snapshot() : {
       connected: false,
+      ready: false,
       deviceName: "未连接",
       statusText: "点击连接打印机",
+      details: [],
     };
     this.setData({
       documentName: document.name || "未命名标签",
       sizeLabel: `${document.width} × ${document.height} mm`,
       objectCount: document.objects.length,
+      pageCount: this.pages.length,
+      activePageNumber: this.activePageIndex + 1,
+      pages: this.pageModels(),
       selected: Boolean(selected),
       selectedType: selected ? selected.type : "",
       selectedTypeName: selected ? TYPE_NAMES[selected.type] || "对象" : "未选择对象",
@@ -177,35 +266,122 @@ Page({
       canRedo: this.engine.redoStack.length > 0,
       nudgeLabel: nudgeStep ? `${nudgeStep}mm` : "微调",
       nudgeActive: nudgeStep > 0,
+      zoomPercent: Math.round(this.view.zoom * 100),
+      viewZoomed: this.view.zoom > 1 || this.view.panX !== 0 || this.view.panY !== 0,
       labelWidth: String(document.width),
       labelHeight: String(document.height),
       deviceConnected: printer.connected,
+      deviceReady: printer.ready,
       deviceName: printer.deviceName,
       deviceStatus: printer.statusText,
+      deviceDetails: printer.details || [],
     });
-    if (save) storage.saveWorking(document);
+    if (save) this.saveWorking();
   },
 
   syncDevice() {
     const printer = this.printerService.snapshot();
     this.setData({
       deviceConnected: printer.connected,
+      deviceReady: printer.ready,
       deviceName: printer.deviceName,
       deviceStatus: printer.statusText,
+      deviceDetails: printer.details || [],
       printing: printer.printing,
     });
   },
 
-  canvasPoint(event, changed = false) {
-    const list = changed ? event.changedTouches : event.touches;
-    const touch = list && list[0];
+  touchPoint(touch) {
     if (!touch || !this.canvasRect) return null;
     if (Number.isFinite(touch.x) && Number.isFinite(touch.y)) return { x: touch.x, y: touch.y };
     return { x: touch.clientX - this.canvasRect.left, y: touch.clientY - this.canvasRect.top };
   },
 
+  canvasPoint(event, changed = false) {
+    const list = changed ? event.changedTouches : event.touches;
+    return this.touchPoint(list && list[0]);
+  },
+
+  clampView() {
+    if (!this.renderer) return;
+    if (this.view.zoom <= 1) {
+      this.view.panX = 0;
+      this.view.panY = 0;
+      return;
+    }
+    const base = computeViewport(this.renderer.width, this.renderer.height, this.engine.document, {
+      padding: 26,
+      zoom: this.view.zoom,
+    });
+    const visible = 48;
+    this.view.panX = Math.max(
+      visible - (base.left + base.width),
+      Math.min(this.renderer.width - visible - base.left, this.view.panX),
+    );
+    this.view.panY = Math.max(
+      visible - (base.top + base.height),
+      Math.min(this.renderer.height - visible - base.top, this.view.panY),
+    );
+  },
+
+  updateZoomState() {
+    this.setData({
+      zoomPercent: Math.round(this.view.zoom * 100),
+      viewZoomed: this.view.zoom > 1 || this.view.panX !== 0 || this.view.panY !== 0,
+    });
+  },
+
+  setViewZoom(value, anchor) {
+    if (!this.renderer || !this.renderer.viewport) return;
+    const zoom = Math.max(1, Math.min(4, Math.round(Number(value) * 20) / 20));
+    const point = anchor || { x: this.renderer.width / 2, y: this.renderer.height / 2 };
+    const documentPoint = screenToDocument(this.renderer.viewport, point);
+    const base = computeViewport(this.renderer.width, this.renderer.height, this.engine.document, { padding: 26, zoom });
+    this.view.zoom = zoom;
+    this.view.panX = point.x - (base.left + documentPoint.x * base.scale);
+    this.view.panY = point.y - (base.top + documentPoint.y * base.scale);
+    this.clampView();
+    this.updateZoomState();
+    this.renderCanvas();
+  },
+
+  zoomIn() {
+    this.setViewZoom(this.view.zoom + 0.25);
+  },
+
+  zoomOut() {
+    this.setViewZoom(this.view.zoom - 0.25);
+  },
+
+  resetView() {
+    this.view = { zoom: 1, panX: 0, panY: 0 };
+    this.viewGesture = null;
+    this.updateZoomState();
+    this.renderCanvas();
+  },
+
+  beginViewGesture(touches) {
+    const first = this.touchPoint(touches && touches[0]);
+    const second = this.touchPoint(touches && touches[1]);
+    if (!first || !second || !this.renderer || !this.renderer.viewport) return false;
+    if (this.gesture && this.gesture.mode !== "pan") this.engine.cancelGesture();
+    this.gesture = null;
+    const midpoint = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+    this.viewGesture = {
+      startDistance: Math.max(1, Math.hypot(second.x - first.x, second.y - first.y)),
+      startZoom: this.view.zoom,
+      anchorDocument: screenToDocument(this.renderer.viewport, midpoint),
+    };
+    return true;
+  },
+
   onCanvasTouchStart(event) {
-    if (!this.renderer || !this.renderer.viewport || !event.touches || event.touches.length !== 1) return;
+    if (!this.renderer || !this.renderer.viewport || !event.touches) return;
+    if (event.touches.length >= 2) {
+      this.beginViewGesture(event.touches);
+      return;
+    }
+    if (event.touches.length !== 1) return;
     const screenPoint = this.canvasPoint(event);
     if (!screenPoint) return;
     const point = screenToDocument(this.renderer.viewport, screenPoint);
@@ -215,7 +391,12 @@ Page({
     const hit = resizing ? selected : hitTest(this.engine.document.objects, point);
     if (!hit) {
       this.engine.select(null);
-      this.gesture = null;
+      this.gesture = this.view.zoom > 1 ? {
+        mode: "pan",
+        startScreen: screenPoint,
+        initialPanX: this.view.panX,
+        initialPanY: this.view.panY,
+      } : null;
       this.syncView(false);
       this.renderCanvas();
       return;
@@ -242,9 +423,34 @@ Page({
   },
 
   onCanvasTouchMove(event) {
-    if (!this.gesture || !this.renderer || !this.renderer.viewport) return;
+    if (!this.renderer || !this.renderer.viewport || !event.touches) return;
+    if (event.touches.length >= 2) {
+      if (!this.viewGesture && !this.beginViewGesture(event.touches)) return;
+      const first = this.touchPoint(event.touches[0]);
+      const second = this.touchPoint(event.touches[1]);
+      if (!first || !second) return;
+      const midpoint = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+      const distance = Math.max(1, Math.hypot(second.x - first.x, second.y - first.y));
+      const zoom = Math.max(1, Math.min(4, this.viewGesture.startZoom * distance / this.viewGesture.startDistance));
+      const roundedZoom = Math.round(zoom * 100) / 100;
+      const base = computeViewport(this.renderer.width, this.renderer.height, this.engine.document, { padding: 26, zoom: roundedZoom });
+      this.view.zoom = roundedZoom;
+      this.view.panX = midpoint.x - (base.left + this.viewGesture.anchorDocument.x * base.scale);
+      this.view.panY = midpoint.y - (base.top + this.viewGesture.anchorDocument.y * base.scale);
+      this.clampView();
+      this.renderCanvas();
+      return;
+    }
+    if (!this.gesture) return;
     const screenPoint = this.canvasPoint(event);
     if (!screenPoint) return;
+    if (this.gesture.mode === "pan") {
+      this.view.panX = this.gesture.initialPanX + screenPoint.x - this.gesture.startScreen.x;
+      this.view.panY = this.gesture.initialPanY + screenPoint.y - this.gesture.startScreen.y;
+      this.clampView();
+      this.renderCanvas();
+      return;
+    }
     const point = screenToDocument(this.renderer.viewport, screenPoint);
     const gesture = this.gesture;
     gesture.moved = true;
@@ -275,7 +481,17 @@ Page({
   },
 
   onCanvasTouchEnd() {
+    if (this.viewGesture) {
+      this.viewGesture = null;
+      this.updateZoomState();
+      return;
+    }
     if (!this.gesture) return;
+    if (this.gesture.mode === "pan") {
+      this.gesture = null;
+      this.updateZoomState();
+      return;
+    }
     this.engine.endGesture();
     this.gesture = null;
     this.guides = {};
@@ -284,8 +500,12 @@ Page({
   },
 
   onCanvasTouchCancel() {
+    if (this.viewGesture) {
+      this.viewGesture = null;
+      this.updateZoomState();
+    }
     if (!this.gesture) return;
-    this.engine.cancelGesture();
+    if (this.gesture.mode !== "pan") this.engine.cancelGesture();
     this.gesture = null;
     this.guides = {};
     this.syncView(false);
@@ -293,7 +513,7 @@ Page({
   },
 
   goBack() {
-    storage.saveWorking(this.engine.document);
+    this.saveWorking();
     const pages = getCurrentPages();
     if (pages.length > 1) wx.navigateBack();
     else wx.reLaunch({ url: "/pages/home/index" });
@@ -314,8 +534,74 @@ Page({
   },
 
   saveDraft() {
-    const draft = storage.saveDraft(this.engine.document);
+    const draft = storage.saveDraft(this.workspaceSnapshot());
     toast(`已保存：${draft.name}`);
+  },
+
+  loadPage(index, closeSheet = true) {
+    if (!this.pages[index] || index === this.activePageIndex) {
+      if (closeSheet) this.closeSheet();
+      return;
+    }
+    this.persistCurrentPage();
+    this.activePageIndex = index;
+    this.engine = new EditorEngine(this.pages[index]);
+    this.guides = {};
+    this.gesture = null;
+    this.view = { zoom: 1, panX: 0, panY: 0 };
+    if (closeSheet) this.setData({ activeSheet: "" });
+    this.syncView(true);
+    this.renderCanvas();
+  },
+
+  openPages() {
+    this.openSheet("pages");
+  },
+
+  selectPage(event) {
+    this.loadPage(Number(event.currentTarget.dataset.index));
+  },
+
+  addPage() {
+    if (this.pages.length >= MAX_PAGES) return toast(`最多支持 ${MAX_PAGES} 页`);
+    this.persistCurrentPage();
+    const current = this.engine.document;
+    const document = createDocument(current.width, current.height, [], {
+      name: current.name,
+      print: current.print,
+    });
+    const index = this.activePageIndex + 1;
+    this.pages.splice(index, 0, document);
+    this.loadPage(index, false);
+    this.setData({ activeSheet: "pages" });
+  },
+
+  duplicatePage() {
+    if (this.pages.length >= MAX_PAGES) return toast(`最多支持 ${MAX_PAGES} 页`);
+    this.persistCurrentPage();
+    const index = this.activePageIndex + 1;
+    this.pages.splice(index, 0, clone(this.engine.document));
+    this.loadPage(index, false);
+    this.setData({ activeSheet: "pages" });
+  },
+
+  async removePage() {
+    if (this.pages.length <= 1) return toast("至少保留一页标签");
+    const result = await callWx("showModal", {
+      title: "删除当前页？",
+      content: `将删除第 ${this.activePageIndex + 1} 页，此操作不会删除其他页面。`,
+      confirmText: "删除",
+      confirmColor: "#c94c43",
+    });
+    if (!result.confirm) return;
+    const index = this.activePageIndex;
+    this.pages.splice(index, 1);
+    this.activePageIndex = Math.min(index, this.pages.length - 1);
+    this.engine = new EditorEngine(this.pages[this.activePageIndex]);
+    this.view = { zoom: 1, panX: 0, panY: 0 };
+    this.syncView(true);
+    this.renderCanvas();
+    this.setData({ activeSheet: "pages" });
   },
 
   openSheet(name) {
@@ -407,6 +693,29 @@ Page({
     this.renderCanvas();
   },
 
+  alignSelected(event) {
+    if (!this.engine.selectedObject) return;
+    this.engine.alignSelected(event.currentTarget.dataset.action);
+    this.syncView(true);
+    this.renderCanvas();
+    this.openProperties();
+  },
+
+  scaleSelected(event) {
+    if (!this.engine.selectedObject) return;
+    this.engine.scaleSelected(Number(event.currentTarget.dataset.factor));
+    this.syncView(true);
+    this.renderCanvas();
+    this.openProperties();
+  },
+
+  changeLayer(event) {
+    if (!this.engine.selectedObject) return;
+    this.engine.changeLayer(event.currentTarget.dataset.action);
+    this.syncView(true);
+    this.renderCanvas();
+  },
+
   duplicateSelected() {
     if (!this.engine.selectedObject) return;
     this.engine.duplicateSelected();
@@ -431,10 +740,13 @@ Page({
         y: String(object.y),
         width: String(object.width),
         height: String(object.height),
+        rotation: String(object.rotation || 0),
         text: object.text || "",
         content: object.content || "",
         fontSize: String(object.fontSize || 4),
         fontWeight: object.fontWeight || "normal",
+        fontFamily: object.fontFamily || "sans-serif",
+        fontFamilyIndex: Math.max(0, FONT_FAMILIES.indexOf(object.fontFamily || "sans-serif")),
         align: object.align || "left",
         errorCorrection: object.errorCorrection || "M",
         format: object.format || "CODE_128",
@@ -455,6 +767,14 @@ Page({
     this.setData({ [`propertyForm.${field}`]: event.currentTarget.dataset.value });
   },
 
+  onFontFamily(event) {
+    const fontFamilyIndex = Number(event.detail.value);
+    this.setData({
+      "propertyForm.fontFamilyIndex": fontFamilyIndex,
+      "propertyForm.fontFamily": FONT_FAMILIES[fontFamilyIndex],
+    });
+  },
+
   applyProperties() {
     const object = this.engine.selectedObject;
     if (!object) return this.closeSheet();
@@ -465,11 +785,13 @@ Page({
       y: numberOr(form.y, object.y),
       width: numberOr(form.width, object.width),
       height: numberOr(form.height, object.height),
+      rotation: numberOr(form.rotation, object.rotation || 0),
     };
     if (object.type === "text") {
       patch.text = form.text;
       patch.fontSize = Math.max(0.8, numberOr(form.fontSize, object.fontSize));
       patch.fontWeight = form.fontWeight;
+      patch.fontFamily = form.fontFamily;
       patch.align = form.align;
     } else if (object.type === "qr") {
       patch.content = form.content;
@@ -501,11 +823,15 @@ Page({
     if (!document) return;
     const result = await callWx("showModal", {
       title: "使用这个模板？",
-      content: "当前画布会被模板副本替换，仍可通过撤销恢复。",
+      content: "模板会作为新的单页标签打开，当前多页工作区会被替换。",
       confirmText: "使用模板",
     });
     if (!result.confirm) return;
-    this.engine.replaceDocument(document);
+    this.pages = [document];
+    this.workspaceId = createWorkspace(document).workspaceId;
+    this.activePageIndex = 0;
+    this.engine = new EditorEngine(document);
+    this.view = { zoom: 1, panX: 0, panY: 0 };
     this.closeSheet();
     this.syncView(true);
     this.renderCanvas();
@@ -533,7 +859,11 @@ Page({
       const transfer = decodeLabelTransfer(result.data);
       const document = await convertDocumentImagesToBitmaps(transfer.document);
       wx.hideLoading();
-      this.engine.replaceDocument(document);
+      this.pages = [document];
+      this.workspaceId = createWorkspace(document).workspaceId;
+      this.activePageIndex = 0;
+      this.engine = new EditorEngine(document);
+      this.view = { zoom: 1, panX: 0, panY: 0 };
       this.closeSheet();
       this.syncView(true);
       this.renderCanvas();
@@ -556,6 +886,13 @@ Page({
     this.setData({ [event.currentTarget.dataset.field]: event.detail.value });
   },
 
+  chooseLabelSize(event) {
+    this.setData({
+      labelWidth: String(event.currentTarget.dataset.width),
+      labelHeight: String(event.currentTarget.dataset.height),
+    });
+  },
+
   onDocumentName(event) {
     this.setData({ documentName: event.detail.value });
   },
@@ -570,25 +907,13 @@ Page({
     if (!Number.isFinite(width) || width < 1 || width > 50 || !Number.isFinite(height) || height < 1 || height > 120) {
       return toast("宽度需为 1–50 mm，高度需为 1–120 mm");
     }
-    this.engine.commit(() => {
-      const document = this.engine.document;
-      document.name = this.data.documentName.trim() || "未命名标签";
-      const scaleX = width / document.width;
-      const scaleY = height / document.height;
-      if (this.data.scaleOnResize) {
-        document.objects.forEach((object) => {
-          object.x *= scaleX;
-          object.y *= scaleY;
-          object.width *= scaleX;
-          object.height *= scaleY;
-          if (object.type === "text") object.fontSize *= Math.min(scaleX, scaleY);
-        });
-      }
-      document.width = roundMm(width);
-      document.height = roundMm(height);
-      document.objects.forEach((object) => clampObject(document, object));
-      validateDocument(document);
-    });
+    const name = this.data.documentName.trim() || "未命名标签";
+    this.engine.commit(() => resizeDocument(this.engine.document, width, height, this.data.scaleOnResize, name));
+    this.persistCurrentPage();
+    this.pages = this.pages.map((page, index) => index === this.activePageIndex
+      ? clone(this.engine.document)
+      : resizeDocument(clone(page), width, height, this.data.scaleOnResize, name));
+    this.view = { zoom: 1, panX: 0, panY: 0 };
     this.closeSheet();
     this.syncView(true);
     this.renderCanvas();
@@ -650,8 +975,8 @@ Page({
     if (!this.printerService.connected) return;
     this.setData({ deviceBusy: true });
     try {
-      const status = await this.printerService.refreshStatus();
-      this.setData({ deviceStatus: status.displayText });
+      await this.printerService.refreshStatus();
+      this.syncDevice();
     } catch (error) {
       toast(error.message || "状态读取失败");
     } finally {
@@ -667,11 +992,14 @@ Page({
     }
     const print = this.engine.document.print || {};
     const directionIndex = Math.max(0, DIRECTION_OPTIONS.findIndex((item) => item.value === (print.direction || 0)));
+    const speedIndex = Math.max(0, SPEED_OPTIONS.findIndex((value) => value === (print.speed || 40)));
     this.setData({
       activeSheet: "print",
       printCopies: print.copies || 1,
       printDensity: print.density === undefined ? 4 : print.density,
       printGap: print.gap === undefined ? 3 : print.gap,
+      printSpeed: print.speed || 40,
+      printSpeedIndex: speedIndex,
       printDirectionIndex: directionIndex,
     });
   },
@@ -688,12 +1016,22 @@ Page({
     this.setData({ printGap: event.detail.value });
   },
 
+  onPrintSpeed(event) {
+    const printSpeedIndex = Number(event.detail.value);
+    this.setData({ printSpeedIndex, printSpeed: SPEED_OPTIONS[printSpeedIndex] });
+  },
+
   onPrintDirection(event) {
     this.setData({ printDirectionIndex: Number(event.detail.value) });
   },
 
   async startPrint() {
     if (this.data.printing) return;
+    if (!this.data.deviceReady) {
+      toast("打印机尚未就绪，请检查设备状态");
+      await this.refreshDeviceStatus();
+      return;
+    }
     this.printStopRequested = false;
     this.setData({ printing: true });
     wx.showLoading({ title: "生成打印点阵", mask: true });
@@ -704,10 +1042,12 @@ Page({
         copies: Number(this.data.printCopies),
         density: Number(this.data.printDensity),
         gap: Number(this.data.printGap),
+        speed: Number(this.data.printSpeed),
         direction: DIRECTION_OPTIONS[this.data.printDirectionIndex].value,
       };
-      storage.saveWorking(document);
-      const raster = rasterizeDocument(document, 8, 190);
+      const workspace = this.workspaceSnapshot();
+      storage.saveWorkingWorkspace(workspace);
+      const raster = workspace.pages.map((page) => rasterizeDocument(page, 8, 190));
       wx.hideLoading();
       await this.printerService.print(raster, document, document.print);
       if (this.printStopRequested) {
@@ -715,7 +1055,11 @@ Page({
         return;
       }
       this.closeSheet();
-      await callWx("showModal", { title: "打印完成", content: "打印机已确认任务完成。", showCancel: false });
+      await callWx("showModal", {
+        title: "打印完成",
+        content: `${workspace.pages.length} 页 × ${document.print.copies} 份已由打印机确认完成。`,
+        showCancel: false,
+      });
     } catch (error) {
       if (this.printStopRequested) {
         toast("打印已停止");

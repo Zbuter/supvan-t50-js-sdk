@@ -47,6 +47,7 @@ button::after {
 }
 
 .bottom-sheet {
+  position: relative;
   width: 100%;
   max-height: 78vh;
   overflow: auto;
@@ -56,15 +57,24 @@ button::after {
   box-shadow: 0 -16rpx 48rpx rgba(24, 31, 26, 0.12);
 }
 
-.sheet-handle {
-  width: 72rpx;
-  height: 8rpx;
-  margin: 0 auto 22rpx;
+.sheet-close {
+  position: absolute;
+  top: 24rpx;
+  right: 28rpx;
+  display: flex;
+  min-width: 92rpx;
+  height: 58rpx;
+  align-items: center;
+  justify-content: center;
   border-radius: 99rpx;
-  background: #d9ddd9;
+  background: #eef1ee;
+  color: #56605a;
+  font-size: 22rpx;
+  font-weight: 650;
 }
 
 .sheet-title {
+  padding-right: 112rpx;
   font-size: 34rpx;
   font-weight: 700;
 }

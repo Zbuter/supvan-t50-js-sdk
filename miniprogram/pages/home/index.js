@@ -1,4 +1,5 @@
 const { createBlank, getTemplate, listTemplates } = require("../../core/templates");
+const { readNavigationMetrics } = require("../../core/navigation");
 const { convertDocumentImagesToBitmaps } = require("../../services/image-import");
 const storage = require("../../services/storage");
 const { decodeLabelTransfer } = require("../../vendor/t50-core");
@@ -16,31 +17,36 @@ function formatTime(timestamp) {
 Page({
   data: {
     statusBarHeight: 24,
+    menuRightInset: 16,
+    navigationHeight: 72,
     templates: [],
     drafts: [],
-    working: null,
+    workings: [],
     showCustomSize: false,
     customWidth: "40",
     customHeight: "30",
   },
 
   onLoad() {
-    try {
-      this.setData({ statusBarHeight: wx.getWindowInfo().statusBarHeight || 24 });
-    } catch (_error) {}
-    this.setData({ templates: listTemplates() });
+    this.setData({
+      ...readNavigationMetrics(wx),
+      templates: listTemplates(),
+    });
   },
 
   onShow() {
     const drafts = storage.listDrafts().map((draft) => ({ ...draft, timeLabel: formatTime(draft.updatedAt) }));
-    const working = storage.loadWorking();
+    const workings = storage.listWorkingWorkspaces().map((item) => ({
+      id: item.id,
+      name: item.name,
+      size: item.size,
+      objectCount: item.objectCount,
+      pageCount: item.pageCount,
+      timeLabel: formatTime(item.updatedAt),
+    }));
     this.setData({
       drafts,
-      working: working ? {
-        name: working.name || "未命名标签",
-        size: `${working.width} × ${working.height} mm`,
-        objectCount: working.objects.length,
-      } : null,
+      workings,
     });
   },
 
@@ -49,9 +55,9 @@ Page({
     wx.navigateTo({ url: "/pages/editor/index" });
   },
 
-  continueWorking() {
-    const document = storage.loadWorking();
-    if (document) this.openEditor(document);
+  continueWorking(event) {
+    const workspace = storage.getWorkingWorkspace(event.currentTarget.dataset.id);
+    if (workspace) this.openEditor(workspace);
   },
 
   useTemplate(event) {
@@ -60,8 +66,8 @@ Page({
   },
 
   openDraft(event) {
-    const document = storage.getDraft(event.currentTarget.dataset.id);
-    if (document) this.openEditor(document);
+    const workspace = storage.getDraftWorkspace(event.currentTarget.dataset.id);
+    if (workspace) this.openEditor(workspace);
   },
 
   showCustomSize() {

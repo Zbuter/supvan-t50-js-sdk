@@ -1,9 +1,9 @@
 <view class="editor-page">
-  <view class="editor-header" style="padding-top: {{statusBarHeight}}px;">
+  <view class="editor-header" style="padding-top: {{statusBarHeight}}px; padding-right: {{menuRightInset}}px; min-height: {{navigationHeight}}px;">
     <button class="header-icon" bindtap="goBack">‹</button>
     <button class="document-heading" bindtap="openSizeSheet">
       <view class="document-name">{{documentName}}</view>
-      <view class="document-size">{{sizeLabel}} · {{objectCount}} 个对象</view>
+      <view class="document-size">{{sizeLabel}} · 第 {{activePageNumber}}/{{pageCount}} 页 · {{objectCount}} 个对象</view>
     </button>
     <view class="header-actions">
       <button class="header-action {{canUndo ? '' : 'is-disabled'}}" disabled="{{!canUndo}}" bindtap="undo">↶</button>
@@ -32,7 +32,13 @@
       bindtouchend="onCanvasTouchEnd"
       bindtouchcancel="onCanvasTouchCancel"
     ></canvas>
+    <view class="view-controls">
+      <button class="view-key" bindtap="zoomOut">−</button>
+      <button class="view-key zoom-reset {{viewZoomed ? 'active' : ''}}" bindtap="resetView">{{zoomPercent}}%</button>
+      <button class="view-key" bindtap="zoomIn">＋</button>
+    </view>
     <button class="size-chip" bindtap="openSizeSheet">{{sizeLabel}}</button>
+    <button class="page-chip" bindtap="openPages">第 {{activePageNumber}} / {{pageCount}} 页</button>
     <view class="selection-chip {{selected ? 'has-selection' : ''}}">
       <view class="selection-type">{{selectedTypeName}}</view>
       <view class="selection-position">{{selectedPosition}}</view>
@@ -78,7 +84,7 @@
 
 <view class="sheet-mask" wx:if="{{activeSheet}}" bindtap="closeSheet">
   <view class="bottom-sheet editor-sheet" catchtap="stopPropagation">
-    <view class="sheet-handle"></view>
+    <button class="sheet-close" bindtap="closeSheet" aria-label="关闭">关闭</button>
 
     <block wx:if="{{activeSheet == 'add'}}">
       <view class="sheet-title">添加对象</view>
@@ -117,6 +123,10 @@
             </view>
           </view>
         </view>
+        <text class="field-label">字体</text>
+        <picker mode="selector" range="{{fontFamilies}}" value="{{propertyForm.fontFamilyIndex}}" bindchange="onFontFamily">
+          <view class="picker-field">{{propertyForm.fontFamily}}<text>⌄</text></view>
+        </picker>
         <text class="field-label">对齐</text>
         <view class="choice-row">
           <button class="choice-chip {{propertyForm.align == 'left' ? 'active' : ''}}" data-field="align" data-value="left" bindtap="onPropertyChoice">左</button>
@@ -159,13 +169,59 @@
         </view>
       </block>
 
+      <view class="property-row rotation-row">
+        <view class="property-half">
+          <text class="field-label">旋转角度（°）</text>
+          <input class="field-input" type="number" value="{{propertyForm.rotation}}" data-field="rotation" bindinput="onPropertyInput" />
+        </view>
+      </view>
+
       <view class="property-row geometry-row">
         <view class="geometry-field"><text class="field-label">X</text><input class="field-input compact" type="digit" value="{{propertyForm.x}}" data-field="x" bindinput="onPropertyInput" /></view>
         <view class="geometry-field"><text class="field-label">Y</text><input class="field-input compact" type="digit" value="{{propertyForm.y}}" data-field="y" bindinput="onPropertyInput" /></view>
         <view class="geometry-field"><text class="field-label">宽</text><input class="field-input compact" type="digit" value="{{propertyForm.width}}" data-field="width" bindinput="onPropertyInput" /></view>
         <view class="geometry-field"><text class="field-label">高</text><input class="field-input compact" type="digit" value="{{propertyForm.height}}" data-field="height" bindinput="onPropertyInput" /></view>
       </view>
+      <view class="property-divider"></view>
+      <view class="field-label">对齐到标签</view>
+      <view class="arrangement-grid align-grid">
+        <button data-action="left" bindtap="alignSelected">左</button>
+        <button data-action="center-horizontal" bindtap="alignSelected">水平中</button>
+        <button data-action="right" bindtap="alignSelected">右</button>
+        <button data-action="top" bindtap="alignSelected">上</button>
+        <button data-action="center-vertical" bindtap="alignSelected">垂直中</button>
+        <button data-action="bottom" bindtap="alignSelected">下</button>
+      </view>
+      <view class="field-label">尺寸与层级</view>
+      <view class="arrangement-grid layer-grid">
+        <button data-factor="0.9" bindtap="scaleSelected">缩小</button>
+        <button data-factor="1.1" bindtap="scaleSelected">放大</button>
+        <button data-action="back" bindtap="changeLayer">置底</button>
+        <button data-action="backward" bindtap="changeLayer">下移</button>
+        <button data-action="forward" bindtap="changeLayer">上移</button>
+        <button data-action="front" bindtap="changeLayer">置顶</button>
+      </view>
       <button class="primary-button sheet-submit" bindtap="applyProperties">应用到画布</button>
+    </block>
+
+    <block wx:elif="{{activeSheet == 'pages'}}">
+      <view class="sheet-title">标签页面</view>
+      <view class="sheet-subtitle">多页使用相同纸张尺寸，打印时会按顺序全部发送。</view>
+      <scroll-view class="page-list" scroll-y>
+        <button class="page-row {{item.active ? 'active' : ''}}" wx:for="{{pages}}" wx:key="index" data-index="{{item.index}}" bindtap="selectPage">
+          <view class="page-number">{{item.number}}</view>
+          <view class="page-row-copy">
+            <view class="page-row-name">{{item.name}}</view>
+            <view class="page-row-meta">{{item.objectCount}} 个对象 · {{sizeLabel}}</view>
+          </view>
+          <view class="page-current">{{item.active ? '当前' : '打开'}}</view>
+        </button>
+      </scroll-view>
+      <view class="page-actions">
+        <button class="secondary-button" bindtap="addPage">＋ 新增空白页</button>
+        <button class="secondary-button" bindtap="duplicatePage">⧉ 复制当前页</button>
+      </view>
+      <button class="danger-button page-remove" disabled="{{pageCount <= 1}}" bindtap="removePage">删除当前页</button>
     </block>
 
     <block wx:elif="{{activeSheet == 'templates'}}">
@@ -188,6 +244,17 @@
     <block wx:elif="{{activeSheet == 'size'}}">
       <view class="sheet-title">标签设置</view>
       <view class="sheet-subtitle">调整的是实际毫米尺寸，画布会按同一比例重新适配。</view>
+      <text class="field-label">常用尺寸（mm）</text>
+      <view class="size-presets">
+        <button
+          class="size-preset {{labelWidth == item.width && labelHeight == item.height ? 'active' : ''}}"
+          wx:for="{{labelSizePresets}}"
+          wx:key="label"
+          data-width="{{item.width}}"
+          data-height="{{item.height}}"
+          bindtap="chooseLabelSize"
+        >{{item.label}}</button>
+      </view>
       <text class="field-label">标签名称</text>
       <input class="field-input" value="{{documentName}}" data-field="name" bindinput="onDocumentName" />
       <view class="property-row">
@@ -224,6 +291,11 @@
         <button class="secondary-button" loading="{{deviceBusy}}" bindtap="refreshDeviceStatus">刷新状态</button>
         <button class="danger-button" disabled="{{deviceBusy}}" bindtap="disconnectDevice">断开连接</button>
       </view>
+      <view wx:if="{{deviceConnected && deviceDetails.length}}" class="device-detail-grid">
+        <view class="device-detail {{item.problem ? 'problem' : ''}}" wx:for="{{deviceDetails}}" wx:key="label">
+          <text>{{item.label}}</text><text class="device-detail-value">{{item.value}}</text>
+        </view>
+      </view>
       <block wx:else>
         <view class="scan-state" wx:if="{{scanning}}"><view class="scan-spinner"></view><text>正在搜索附近设备…</text></view>
         <button class="device-row" wx:for="{{devices}}" wx:key="deviceId" data-id="{{item.deviceId}}" bindtap="connectDevice">
@@ -244,7 +316,7 @@
       <view class="sheet-subtitle">{{deviceName}} · {{sizeLabel}} · 8 点/mm</view>
       <view class="print-summary">
         <view class="summary-label">将打印</view>
-        <view class="summary-value">{{printCopies}} 份</view>
+        <view class="summary-value">{{pageCount}} 页 × {{printCopies}} 份</view>
       </view>
       <text class="field-label">份数</text>
       <input class="field-input" type="number" value="{{printCopies}}" bindinput="onPrintCopies" />
@@ -252,11 +324,16 @@
       <slider min="0" max="9" step="1" value="{{printDensity}}" activeColor="#168557" block-size="22" bindchange="onPrintDensity" />
       <view class="slider-heading"><text>标签间隙</text><text>{{printGap}} mm</text></view>
       <slider min="0" max="8" step="1" value="{{printGap}}" activeColor="#168557" block-size="22" bindchange="onPrintGap" />
+      <text class="field-label">打印速度</text>
+      <picker mode="selector" range="{{speedOptions}}" value="{{printSpeedIndex}}" bindchange="onPrintSpeed">
+        <view class="picker-field">{{printSpeed}} mm/s<text>⌄</text></view>
+      </picker>
       <text class="field-label">打印方向</text>
       <picker mode="selector" range="{{directionOptions}}" range-key="label" value="{{printDirectionIndex}}" bindchange="onPrintDirection">
         <view class="picker-field">{{directionOptions[printDirectionIndex].label}}<text>⌄</text></view>
       </picker>
-      <button class="primary-button print-submit" loading="{{printing}}" disabled="{{printing}}" bindtap="startPrint">{{printing ? '正在打印…' : '开始打印'}}</button>
+      <view class="print-readiness {{deviceReady ? 'ready' : 'problem'}}">{{deviceReady ? '打印机已就绪' : '打印机未就绪，请刷新状态或检查耗材与上盖'}}</view>
+      <button class="primary-button print-submit" loading="{{printing}}" disabled="{{printing || !deviceReady}}" bindtap="startPrint">{{printing ? '正在打印…' : deviceReady ? '开始打印' : '设备未就绪'}}</button>
       <button class="danger-button stop-button" wx:if="{{printing}}" bindtap="stopPrint">停止打印</button>
     </block>
   </view>

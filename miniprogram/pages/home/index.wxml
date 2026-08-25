@@ -1,5 +1,5 @@
 <view class="home-page">
-  <view class="home-nav" style="padding-top: {{statusBarHeight}}px;">
+  <view class="home-nav" style="padding-top: {{statusBarHeight}}px; padding-right: {{menuRightInset}}px; min-height: {{navigationHeight}}px;">
     <view>
       <view class="brand">SUPVAN</view>
       <view class="nav-title">标签工作台</view>
@@ -19,20 +19,21 @@
     <button class="hero-action" bindtap="showCustomSize">＋ 新建空白</button>
   </view>
 
-  <view class="section" wx:if="{{working}}">
+  <view class="section" wx:if="{{workings.length}}">
     <view class="section-header">
       <view class="section-title">继续编辑</view>
-      <view class="section-caption">自动保存</view>
+      <view class="section-caption">{{workings.length}} 份 · 自动保存</view>
     </view>
-    <button class="working-card" bindtap="continueWorking">
+    <button class="working-card" wx:for="{{workings}}" wx:key="id" data-id="{{item.id}}" bindtap="continueWorking">
       <view class="working-preview">
         <view class="preview-line strong"></view>
         <view class="preview-line"></view>
         <view class="preview-code"></view>
       </view>
       <view class="working-info">
-        <view class="working-name">{{working.name}}</view>
-        <view class="working-meta">{{working.size}} · {{working.objectCount}} 个对象</view>
+        <view class="working-name">{{item.name}}</view>
+        <view class="working-meta">{{item.size}} · {{item.pageCount}} 页 · {{item.objectCount}} 个对象</view>
+        <view class="working-time">{{item.timeLabel}}</view>
       </view>
       <view class="working-arrow">›</view>
     </button>
@@ -66,7 +67,7 @@
       <view class="draft-icon">L</view>
       <view class="draft-content">
         <view class="draft-name">{{item.name}}</view>
-        <view class="draft-meta">{{item.size}} · {{item.timeLabel}}</view>
+        <view class="draft-meta">{{item.size}} · {{item.pageCount || 1}} 页 · {{item.timeLabel}}</view>
       </view>
       <view class="working-arrow">›</view>
     </button>
@@ -77,7 +78,7 @@
 
 <view class="sheet-mask" wx:if="{{showCustomSize}}" bindtap="closeCustomSize">
   <view class="bottom-sheet" catchtap="stopPropagation">
-    <view class="sheet-handle"></view>
+    <button class="sheet-close" bindtap="closeCustomSize" aria-label="关闭">关闭</button>
     <view class="sheet-title">新建空白标签</view>
     <view class="sheet-subtitle">T50 支持宽 1–50 mm、高 1–120 mm</view>
     <view class="size-fields">

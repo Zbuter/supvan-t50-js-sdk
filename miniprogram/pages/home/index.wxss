@@ -112,6 +112,10 @@
   box-shadow: 0 8rpx 24rpx rgba(26, 34, 29, 0.06);
 }
 
+.working-card + .working-card {
+  margin-top: 14rpx;
+}
+
 .working-preview {
   position: relative;
   width: 138rpx;
@@ -162,6 +166,12 @@
   margin-top: 10rpx;
   color: #858b87;
   font-size: 22rpx;
+}
+
+.working-time {
+  margin-top: 6rpx;
+  color: #a0a6a2;
+  font-size: 19rpx;
 }
 
 .working-arrow {

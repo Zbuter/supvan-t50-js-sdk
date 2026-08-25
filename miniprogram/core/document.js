@@ -20,6 +20,12 @@ function roundMm(value) {
   return Math.round(Number(value) * 100) / 100;
 }
 
+function normalizeAngle(value) {
+  const angle = Number(value || 0);
+  if (!Number.isFinite(angle)) return 0;
+  return roundMm(((angle % 360) + 360) % 360);
+}
+
 function createId(prefix = "object") {
   idSequence = (idSequence + 1) % 100000;
   return `${prefix}-${Date.now().toString(36)}-${idSequence.toString(36)}`;
@@ -134,7 +140,7 @@ function clampObject(document, object) {
   next.height = roundMm(Math.max(0.5, Math.min(next.height, document.height)));
   next.x = roundMm(Math.max(0, Math.min(next.x, document.width - next.width)));
   next.y = roundMm(Math.max(0, Math.min(next.y, document.height - next.height)));
-  next.rotation = ((Math.round(Number(next.rotation || 0) / 90) * 90) % 360 + 360) % 360;
+  next.rotation = normalizeAngle(next.rotation);
   return next;
 }
 
@@ -207,6 +213,7 @@ module.exports = {
   duplicateObject,
   findObject,
   parseDocument,
+  normalizeAngle,
   removeObject,
   roundMm,
   serializeDocument,

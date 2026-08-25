@@ -15,7 +15,7 @@
     "check:miniprogram": "node scripts/verify-miniprogram.mjs",
     "typecheck": "npm run typecheck --workspace shuofang-t50-sdk && npm run typecheck --workspace @buterz/t50-browser",
     "test": "npm run test --workspace shuofang-t50-sdk && npm run test --workspace @buterz/t50-browser && npm run test:miniprogram && npm run build:lib --workspace shuofang-t50-sdk",
-    "test:miniprogram": "node --test miniprogram/tests/document.test.cjs miniprogram/tests/geometry.test.cjs miniprogram/tests/editor-engine.test.cjs miniprogram/tests/barcode.test.cjs",
+    "test:miniprogram": "node --test miniprogram/tests/document.test.cjs miniprogram/tests/geometry.test.cjs miniprogram/tests/editor-engine.test.cjs miniprogram/tests/barcode.test.cjs miniprogram/tests/workspace.test.cjs miniprogram/tests/navigation.test.cjs miniprogram/tests/ble-filter.test.cjs miniprogram/tests/storage.test.cjs",
     "pack:sdk": "npm run build:lib --workspace shuofang-t50-sdk && npm run pack:check --workspace shuofang-t50-sdk"
   },
   "engines": {

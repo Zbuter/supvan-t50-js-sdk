@@ -151,6 +151,40 @@
   height: 100%;
 }
 
+.view-controls {
+  position: absolute;
+  top: 14rpx;
+  left: 14rpx;
+  display: flex;
+  padding: 5rpx;
+  gap: 4rpx;
+  border: 2rpx solid rgba(34, 42, 37, 0.08);
+  border-radius: 16rpx;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.view-key {
+  display: flex;
+  min-width: 48rpx;
+  height: 48rpx;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11rpx;
+  background: #f0f3f0;
+  font-size: 25rpx;
+}
+
+.view-key.zoom-reset {
+  min-width: 82rpx;
+  color: #66706a;
+  font-size: 18rpx;
+}
+
+.view-key.zoom-reset.active {
+  background: #dff2e7;
+  color: #176b47;
+}
+
 .size-chip {
   position: absolute;
   top: 14rpx;
@@ -162,6 +196,18 @@
   color: #59615b;
   font-size: 19rpx;
   backdrop-filter: blur(12rpx);
+}
+
+.page-chip {
+  position: absolute;
+  top: 78rpx;
+  left: 14rpx;
+  padding: 9rpx 14rpx;
+  border: 2rpx solid rgba(34, 42, 37, 0.08);
+  border-radius: 99rpx;
+  background: rgba(255, 255, 255, 0.9);
+  color: #59615b;
+  font-size: 18rpx;
 }
 
 .selection-chip {
@@ -389,6 +435,36 @@
   margin-top: 4rpx;
 }
 
+.rotation-row {
+  margin-top: 12rpx;
+}
+
+.property-divider {
+  height: 2rpx;
+  margin: 28rpx 0 22rpx;
+  background: #edf0ed;
+}
+
+.arrangement-grid {
+  display: grid;
+  margin-bottom: 22rpx;
+  gap: 10rpx;
+}
+
+.align-grid,
+.layer-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.arrangement-grid button {
+  min-height: 66rpx;
+  border: 2rpx solid #e1e5e2;
+  border-radius: 15rpx;
+  background: #f5f7f5;
+  color: #4f5752;
+  font-size: 22rpx;
+}
+
 .geometry-field {
   min-width: 0;
   flex: 1;
@@ -408,6 +484,75 @@
   margin: 26rpx 0 22rpx;
   grid-template-columns: 1fr 1fr;
   gap: 12rpx;
+}
+
+.page-list {
+  max-height: 44vh;
+  margin-top: 20rpx;
+}
+
+.page-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 10rpx;
+  padding: 18rpx;
+  border: 2rpx solid #e4e8e5;
+  border-radius: 18rpx;
+  background: #f8f9f7;
+  text-align: left;
+}
+
+.page-row.active {
+  border-color: #72b993;
+  background: #ebf7f0;
+}
+
+.page-number {
+  display: flex;
+  width: 54rpx;
+  height: 54rpx;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14rpx;
+  background: #17251e;
+  color: #fff;
+  font-size: 23rpx;
+  font-weight: 700;
+}
+
+.page-row-copy {
+  min-width: 0;
+  flex: 1;
+  padding-left: 16rpx;
+}
+
+.page-row-name {
+  font-size: 26rpx;
+  font-weight: 680;
+}
+
+.page-row-meta {
+  margin-top: 4rpx;
+  color: #858c87;
+  font-size: 19rpx;
+}
+
+.page-current {
+  color: #25704e;
+  font-size: 20rpx;
+}
+
+.page-actions {
+  display: grid;
+  margin-top: 16rpx;
+  grid-template-columns: 1fr 1fr;
+  gap: 12rpx;
+}
+
+.page-remove {
+  width: 100%;
+  margin-top: 12rpx;
 }
 
 .template-row {
@@ -449,6 +594,32 @@
   font-size: 20rpx;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.size-presets {
+  display: grid;
+  margin: 12rpx 0 24rpx;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10rpx;
+}
+
+.size-preset {
+  width: 100%;
+  min-height: 64rpx;
+  padding: 0 8rpx;
+  border: 2rpx solid #e3e8e4;
+  border-radius: 14rpx;
+  background: #f6f8f6;
+  color: #57615a;
+  font-size: 21rpx;
+  line-height: 60rpx;
+}
+
+.size-preset.active {
+  border-color: #168557;
+  background: #e8f5ed;
+  color: #116a45;
+  font-weight: 700;
 }
 
 .switch-row {
@@ -516,6 +687,35 @@
   margin-top: 18rpx;
   grid-template-columns: 1fr 1fr;
   gap: 12rpx;
+}
+
+.device-detail-grid {
+  display: grid;
+  margin-top: 18rpx;
+  grid-template-columns: 1fr 1fr;
+  gap: 10rpx;
+}
+
+.device-detail {
+  display: flex;
+  min-width: 0;
+  justify-content: space-between;
+  padding: 16rpx;
+  border-radius: 14rpx;
+  background: #f3f6f4;
+  color: #68706b;
+  font-size: 19rpx;
+}
+
+.device-detail-value {
+  margin-left: 8rpx;
+  color: #27322b;
+  font-weight: 680;
+}
+
+.device-detail.problem {
+  background: #fff0ee;
+  color: #a0443d;
 }
 
 .scan-state {
@@ -651,6 +851,23 @@
 .print-submit {
   margin-top: 30rpx;
   background: #168557;
+}
+
+.print-readiness {
+  margin-top: 22rpx;
+  padding: 16rpx 18rpx;
+  border-radius: 14rpx;
+  font-size: 21rpx;
+}
+
+.print-readiness.ready {
+  background: #e9f6ee;
+  color: #236746;
+}
+
+.print-readiness.problem {
+  background: #fff0ee;
+  color: #a0443d;
 }
 
 .stop-button {

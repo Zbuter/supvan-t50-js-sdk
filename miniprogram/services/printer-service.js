@@ -13,6 +13,25 @@ function statusText(status) {
   return "设备就绪";
 }
 
+function statusDetails(status) {
+  if (!status) return [];
+  const flags = status.flags || {};
+  const metrics = status.metrics || {};
+  const media = flags.mediaEmpty ? "已用完"
+    : flags.mediaLow ? "余量不足"
+      : flags.mediaNotInstalled || flags.labelNotInstalled ? "未安装"
+        : flags.mediaUnrecognized || flags.mediaNotDetected ? "未识别"
+          : "正常";
+  return [
+    { label: "设备就绪", value: status.ready ? "是" : "否", problem: !status.ready },
+    { label: "上盖", value: flags.coverOpen ? "已打开" : "已关闭", problem: Boolean(flags.coverOpen) },
+    { label: "耗材", value: media, problem: media !== "正常" },
+    { label: "电池", value: flags.charging ? "充电中" : flags.batteryLow ? "电量低" : "正常", problem: Boolean(flags.batteryLow) },
+    { label: "温度", value: Number.isFinite(metrics.temperatureC) ? `${metrics.temperatureC.toFixed(1)} °C` : "未提供", problem: Boolean(flags.headOverheat) },
+    { label: "打印页数", value: metrics.totalPages ? `${metrics.printedPages || 0} / ${metrics.totalPages}` : String(metrics.printedPages || 0), problem: false },
+  ];
+}
+
 class PrinterService {
   constructor() {
     this.transport = null;
@@ -30,9 +49,11 @@ class PrinterService {
   snapshot() {
     return {
       connected: this.connected,
+      ready: Boolean(this.connected && this.lastStatus && this.lastStatus.ready),
       deviceName: this.device ? this.device.name : "未连接",
       printing: this.printing,
       statusText: this.connected ? statusText(this.lastStatus) : "点击连接打印机",
+      details: this.connected ? statusDetails(this.lastStatus) : [],
     };
   }
 
@@ -86,7 +107,7 @@ class PrinterService {
     try {
       const metadata = document.print || {};
       await this.printer.print({
-        pages: [raster],
+        pages: Array.isArray(raster) ? raster : [raster],
         settings: {
           materialWidth: document.width,
           materialHeight: document.height,
@@ -115,4 +136,4 @@ class PrinterService {
 
 const service = new PrinterService();
 
-module.exports = { PrinterService, getPrinterService: () => service, statusText };
+module.exports = { PrinterService, getPrinterService: () => service, statusDetails, statusText };

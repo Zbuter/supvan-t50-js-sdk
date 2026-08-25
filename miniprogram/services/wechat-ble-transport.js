@@ -36,6 +36,16 @@ async function ensureBluetoothAdapter() {
   }
 }
 
+function printerDeviceName(device = {}) {
+  return [device.name, device.localName]
+    .map((value) => String(value || "").trim())
+    .find((value) => /^T0/i.test(value)) || "";
+}
+
+function matchesPrinterPrefix(device) {
+  return Boolean(printerDeviceName(device));
+}
+
 class ByteQueue {
   constructor() {
     this.buffer = new Uint8Array();
@@ -83,15 +93,11 @@ async function startDeviceDiscovery(onDevices) {
   const devices = new Map();
   const emit = () => {
     const values = Array.from(devices.values())
-      .filter((device) => device.name || device.localName)
-      .sort((left, right) => {
-        const leftPreferred = /t50|supvan|硕方/i.test(`${left.name || ""} ${left.localName || ""}`) ? 1 : 0;
-        const rightPreferred = /t50|supvan|硕方/i.test(`${right.name || ""} ${right.localName || ""}`) ? 1 : 0;
-        return rightPreferred - leftPreferred || (right.RSSI || -999) - (left.RSSI || -999);
-      })
+      .filter(matchesPrinterPrefix)
+      .sort((left, right) => (right.RSSI || -999) - (left.RSSI || -999))
       .map((device) => ({
         deviceId: device.deviceId,
-        name: device.name || device.localName || "未命名设备",
+        name: printerDeviceName(device),
         RSSI: device.RSSI,
       }));
     onDevices(values);
@@ -251,6 +257,8 @@ module.exports = {
   BULK_NOTIFY_UUID,
   CONTROL_UUID,
   DATA_UUID,
+  matchesPrinterPrefix,
+  printerDeviceName,
   SERVICE_UUID,
   WechatBleTransport,
   ensureBluetoothAdapter,

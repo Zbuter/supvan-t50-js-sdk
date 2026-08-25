@@ -57,7 +57,9 @@ function drawText(ctx, object, width, height, scale) {
   } else {
     ctx.fillStyle = "#000";
   }
-  ctx.font = `${object.fontWeight === "bold" ? "700" : "400"} ${fontSize}px sans-serif`;
+  const fontFamily = String(object.fontFamily || "sans-serif").replace(/["']/g, "");
+  const fontStack = /^(?:sans-serif|serif|monospace)$/.test(fontFamily) ? fontFamily : `"${fontFamily}", sans-serif`;
+  ctx.font = `${object.fontWeight === "bold" ? "700" : "400"} ${fontSize}px ${fontStack}`;
   ctx.textBaseline = "top";
   ctx.textAlign = object.align || "left";
   const x = object.align === "center" ? 0 : object.align === "right" ? width / 2 : -width / 2;
@@ -383,7 +385,12 @@ class CanvasRenderer {
     for (let y = 0; y < this.height; y += 16) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(this.width, y); ctx.stroke();
     }
-    const viewport = computeViewport(this.width, this.height, document, { padding: 26, zoom: options.zoom || 1 });
+    const viewport = computeViewport(this.width, this.height, document, {
+      padding: 26,
+      zoom: options.zoom || 1,
+      panX: options.panX || 0,
+      panY: options.panY || 0,
+    });
     this.viewport = viewport;
     ctx.save();
     ctx.shadowColor = "rgba(22, 28, 24, 0.16)";
