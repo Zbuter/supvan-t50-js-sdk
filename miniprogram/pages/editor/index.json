@@ -1,4 +1,4 @@
 {
-  "navigationBarTitleText": "编辑标签",
-  "usingComponents": {}
+  "navigationStyle": "custom",
+  "disableScroll": true
 }

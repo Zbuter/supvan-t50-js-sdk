@@ -1,44 +1,119 @@
 page {
-  color: #17211b;
-  background: #f5f7f6;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+  min-height: 100%;
+  background: #f3f4f1;
+  color: #171a18;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+view,
+text,
+button,
+input,
+slider,
+switch,
+canvas {
+  box-sizing: border-box;
 }
 
 button {
-  border-radius: 12rpx;
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  line-height: inherit;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
 }
 
-.page {
-  min-height: 100vh;
-  box-sizing: border-box;
-  padding: 32rpx;
+button::after {
+  border: 0;
 }
 
-.card {
-  box-sizing: border-box;
-  padding: 28rpx;
-  border: 1rpx solid #dce4df;
-  border-radius: 18rpx;
-  background: #ffffff;
-  box-shadow: 0 12rpx 32rpx rgba(23, 33, 27, 0.06);
+.safe-top {
+  padding-top: env(safe-area-inset-top);
 }
 
-.muted {
-  color: #738078;
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.sheet-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(15, 18, 16, 0.36);
+}
+
+.bottom-sheet {
+  width: 100%;
+  max-height: 78vh;
+  overflow: auto;
+  padding: 28rpx 28rpx calc(28rpx + env(safe-area-inset-bottom));
+  border-radius: 32rpx 32rpx 0 0;
+  background: #fff;
+  box-shadow: 0 -16rpx 48rpx rgba(24, 31, 26, 0.12);
+}
+
+.sheet-handle {
+  width: 72rpx;
+  height: 8rpx;
+  margin: 0 auto 22rpx;
+  border-radius: 99rpx;
+  background: #d9ddd9;
+}
+
+.sheet-title {
+  font-size: 34rpx;
+  font-weight: 700;
+}
+
+.sheet-subtitle {
+  margin-top: 8rpx;
+  color: #7b817d;
   font-size: 24rpx;
 }
 
+.primary-button,
+.secondary-button,
+.danger-button {
+  display: flex;
+  min-height: 88rpx;
+  align-items: center;
+  justify-content: center;
+  border-radius: 22rpx;
+  font-weight: 650;
+}
+
 .primary-button {
-  color: #ffffff;
-  background: #13795b;
+  background: #171a18;
+  color: #fff;
 }
 
 .secondary-button {
-  color: #176b51;
-  background: #e9f4ef;
+  background: #eef1ee;
+  color: #262b27;
 }
 
 .danger-button {
-  color: #a43a32;
   background: #fff0ee;
+  color: #b33a2e;
+}
+
+.field-label {
+  display: block;
+  margin: 24rpx 0 10rpx;
+  color: #6e746f;
+  font-size: 24rpx;
+}
+
+.field-input {
+  width: 100%;
+  min-height: 80rpx;
+  padding: 0 22rpx;
+  border: 2rpx solid #e3e7e3;
+  border-radius: 18rpx;
+  background: #f8f9f7;
+  font-size: 28rpx;
 }

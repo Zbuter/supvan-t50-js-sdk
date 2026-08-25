@@ -1,4 +1,9 @@
 {
-  "desc": "硕方标签编辑器",
-  "rules": []
+  "desc": "硕方 T50 标签编辑器",
+  "rules": [
+    {
+      "action": "allow",
+      "page": "*"
+    }
+  ]
 }

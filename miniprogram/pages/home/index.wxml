@@ -1,28 +1,96 @@
-<view class="page home-page">
-  <view class="hero">
-    <view class="brand-mark">SF</view>
+<view class="home-page">
+  <view class="home-nav" style="padding-top: {{statusBarHeight}}px;">
     <view>
-      <view class="title">硕方标签工作台</view>
-      <view class="muted">LabelDocument 小程序编辑器</view>
+      <view class="brand">SUPVAN</view>
+      <view class="nav-title">标签工作台</view>
     </view>
+    <button class="import-button" bindtap="importClipboard">从剪贴板导入</button>
   </view>
 
-  <view class="card intro-card">
-    <view class="section-title">导入可编辑标签</view>
-    <view class="muted description">从浏览器点击“复制到小程序”，再从这里读取剪贴板。文字、条码、二维码、图片点位和尺寸都会保留。</view>
-    <button class="primary-button" bindtap="importClipboard">从剪贴板导入</button>
-    <button class="secondary-button" bindtap="createBlank">新建空白标签</button>
-    <view wx:if="{{status}}" class="error-message">{{status}}</view>
-  </view>
-
-  <view wx:if="{{recent.length}}" class="recent-section">
-    <view class="section-title">最近标签</view>
-    <view wx:for="{{recent}}" wx:key="id" class="card recent-card" data-index="{{index}}" bindtap="openRecent">
-      <view>
-        <view class="recent-name">{{item.name}}</view>
-        <view class="muted">{{item.document.width}} × {{item.document.height}} mm</view>
+  <view class="hero-card">
+    <view class="hero-copy">
+      <view class="hero-kicker">T50 · 8 点/mm</view>
+      <view class="hero-title">
+        <text class="hero-title-line">像在纸上排版一样</text>
+        <text class="hero-title-line">拖动你的标签</text>
       </view>
-      <view class="recent-arrow">›</view>
+      <view class="hero-note">直接点选、拖动、缩放，再连接蓝牙打印。</view>
     </view>
+    <button class="hero-action" bindtap="showCustomSize">＋ 新建空白</button>
+  </view>
+
+  <view class="section" wx:if="{{working}}">
+    <view class="section-header">
+      <view class="section-title">继续编辑</view>
+      <view class="section-caption">自动保存</view>
+    </view>
+    <button class="working-card" bindtap="continueWorking">
+      <view class="working-preview">
+        <view class="preview-line strong"></view>
+        <view class="preview-line"></view>
+        <view class="preview-code"></view>
+      </view>
+      <view class="working-info">
+        <view class="working-name">{{working.name}}</view>
+        <view class="working-meta">{{working.size}} · {{working.objectCount}} 个对象</view>
+      </view>
+      <view class="working-arrow">›</view>
+    </button>
+  </view>
+
+  <view class="section">
+    <view class="section-header">
+      <view class="section-title">快速开始</view>
+      <view class="section-caption">模板复制后可自由编辑</view>
+    </view>
+    <scroll-view class="template-scroll" scroll-x enable-flex show-scrollbar="{{false}}">
+      <button class="template-card tone-{{item.tone}}" wx:for="{{templates}}" wx:key="id" data-id="{{item.id}}" bindtap="useTemplate">
+        <view class="template-label">
+          <view class="template-line wide"></view>
+          <view class="template-line"></view>
+          <view class="template-code"></view>
+        </view>
+        <view class="template-name">{{item.name}}</view>
+        <view class="template-description">{{item.description}}</view>
+        <view class="template-size">{{item.size}}</view>
+      </button>
+    </scroll-view>
+  </view>
+
+  <view class="section" wx:if="{{drafts.length}}">
+    <view class="section-header">
+      <view class="section-title">已保存标签</view>
+      <view class="section-caption">{{drafts.length}} 份</view>
+    </view>
+    <button class="draft-row" wx:for="{{drafts}}" wx:key="id" data-id="{{item.id}}" bindtap="openDraft">
+      <view class="draft-icon">L</view>
+      <view class="draft-content">
+        <view class="draft-name">{{item.name}}</view>
+        <view class="draft-meta">{{item.size}} · {{item.timeLabel}}</view>
+      </view>
+      <view class="working-arrow">›</view>
+    </button>
+  </view>
+
+  <view class="home-footer safe-bottom">本地保存 · 不上传标签内容</view>
+</view>
+
+<view class="sheet-mask" wx:if="{{showCustomSize}}" bindtap="closeCustomSize">
+  <view class="bottom-sheet" catchtap="stopPropagation">
+    <view class="sheet-handle"></view>
+    <view class="sheet-title">新建空白标签</view>
+    <view class="sheet-subtitle">T50 支持宽 1–50 mm、高 1–120 mm</view>
+    <view class="size-fields">
+      <view class="size-field">
+        <text class="field-label">宽度（mm）</text>
+        <input class="field-input" type="digit" value="{{customWidth}}" bindinput="onCustomWidth" />
+      </view>
+      <view class="size-multiply">×</view>
+      <view class="size-field">
+        <text class="field-label">高度（mm）</text>
+        <input class="field-input" type="digit" value="{{customHeight}}" bindinput="onCustomHeight" />
+      </view>
+    </view>
+    <button class="primary-button create-button" bindtap="createCustom">进入编辑画布</button>
   </view>
 </view>
