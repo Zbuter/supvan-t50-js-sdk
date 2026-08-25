@@ -12,7 +12,7 @@ const { createDocument } = require("../core/document");
 const { createWorkspace } = require("../core/workspace");
 const storage = require("../services/storage");
 
-test("keeps independently editable workspaces in most-recent order", () => {
+test("keeps only the most recent automatic working workspace", () => {
   values.clear();
   const first = createWorkspace(createDocument(40, 30, [], { name: "第一份" }));
   const second = createWorkspace(createDocument(50, 30, [], { name: "第二份" }));
@@ -20,14 +20,14 @@ test("keeps independently editable workspaces in most-recent order", () => {
   storage.saveWorkingWorkspace(second);
 
   let items = storage.listWorkingWorkspaces();
-  assert.deepEqual(items.map((item) => item.name), ["第二份", "第一份"]);
-  assert.equal(storage.getWorkingWorkspace(first.workspaceId).pages[0].name, "第一份");
+  assert.deepEqual(items.map((item) => item.name), ["第二份"]);
+  assert.equal(storage.loadWorkingWorkspace().workspaceId, second.workspaceId);
 
   first.pages[0].name = "第一份（已更新）";
   storage.saveWorkingWorkspace(first);
   items = storage.listWorkingWorkspaces();
-  assert.deepEqual(items.map((item) => item.name), ["第一份（已更新）", "第二份"]);
-  assert.equal(items.length, 2);
+  assert.deepEqual(items.map((item) => item.name), ["第一份（已更新）"]);
+  assert.equal(items.length, 1);
 });
 
 test("migrates the previous single working workspace into the recent list", () => {

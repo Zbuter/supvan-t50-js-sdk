@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { computeNavigationMetrics } = require("../core/navigation");
+const { computeNavigationMetrics, isDevtoolsEnvironment } = require("../core/navigation");
 
 test("reserves the WeChat menu capsule area in a custom navigation bar", () => {
   assert.deepEqual(
@@ -18,4 +18,18 @@ test("uses safe navigation fallbacks when the capsule API is unavailable", () =>
     computeNavigationMetrics({ statusBarHeight: 24, windowWidth: 375 }),
     { statusBarHeight: 24, menuRightInset: 16, navigationHeight: 72 },
   );
+});
+
+test("detects the DevTools platform through both current and legacy APIs", () => {
+  assert.equal(isDevtoolsEnvironment({
+    getDeviceInfo: () => ({ platform: "devtools" }),
+  }), true);
+  assert.equal(isDevtoolsEnvironment({
+    getDeviceInfo: () => ({ platform: "windows" }),
+    getSystemInfoSync: () => ({ platform: "devtools" }),
+  }), true);
+  assert.equal(isDevtoolsEnvironment({
+    getDeviceInfo: () => ({ platform: "ios" }),
+    getSystemInfoSync: () => ({ platform: "ios" }),
+  }), false);
 });

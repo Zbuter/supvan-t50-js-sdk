@@ -44,7 +44,19 @@ function readNavigationMetrics(wxApi) {
   return computeNavigationMetrics(windowInfo, menuButton);
 }
 
+function isDevtoolsEnvironment(wxApi) {
+  const platforms = [];
+  try {
+    if (wxApi.getDeviceInfo) platforms.push(wxApi.getDeviceInfo().platform);
+  } catch (_error) {}
+  try {
+    if (wxApi.getSystemInfoSync) platforms.push(wxApi.getSystemInfoSync().platform);
+  } catch (_error) {}
+  return platforms.some((platform) => String(platform || "").toLowerCase() === "devtools");
+}
+
 module.exports = {
   computeNavigationMetrics,
+  isDevtoolsEnvironment,
   readNavigationMetrics,
 };

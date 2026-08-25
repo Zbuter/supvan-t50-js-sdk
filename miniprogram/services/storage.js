@@ -8,7 +8,7 @@ const DRAFTS_KEY = "supvan.editor.drafts.v3";
 const LEGACY_WORKING_KEY = "supvan.editor.working.v2";
 const LEGACY_PENDING_KEY = "supvan.editor.pending.v2";
 const LEGACY_DRAFTS_KEY = "supvan.editor.drafts.v2";
-const MAX_WORKING_ITEMS = 12;
+const MAX_WORKING_ITEMS = 1;
 
 function read(key, fallback) {
   try {
@@ -55,7 +55,9 @@ function normalizeWorkingItem(item) {
 function listWorkingWorkspaces() {
   const current = read(WORKING_LIST_KEY, null);
   if (Array.isArray(current)) {
-    return current.map(normalizeWorkingItem).filter(Boolean).slice(0, MAX_WORKING_ITEMS);
+    const normalized = current.map(normalizeWorkingItem).filter(Boolean).slice(0, MAX_WORKING_ITEMS);
+    if (current.length !== normalized.length) write(WORKING_LIST_KEY, normalized);
+    return normalized;
   }
   const legacy = read(WORKING_KEY, null) || read(LEGACY_WORKING_KEY, null);
   const migrated = normalizeWorkingItem(legacy);
@@ -82,11 +84,6 @@ function saveWorking(document) {
 
 function loadWorkingWorkspace() {
   const item = listWorkingWorkspaces()[0];
-  return item ? clone(item.workspace) : null;
-}
-
-function getWorkingWorkspace(id) {
-  const item = listWorkingWorkspaces().find((current) => current.id === id);
   return item ? clone(item.workspace) : null;
 }
 
@@ -172,7 +169,6 @@ function getDraftWorkspace(id) {
 module.exports = {
   getDraft,
   getDraftWorkspace,
-  getWorkingWorkspace,
   listDrafts,
   listWorkingWorkspaces,
   loadWorking,

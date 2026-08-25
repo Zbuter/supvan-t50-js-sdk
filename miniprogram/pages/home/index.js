@@ -1,4 +1,5 @@
 const { createBlank, getTemplate, listTemplates } = require("../../core/templates");
+const { activeDocument } = require("../../core/workspace");
 const { readNavigationMetrics } = require("../../core/navigation");
 const { convertDocumentImagesToBitmaps } = require("../../services/image-import");
 const storage = require("../../services/storage");
@@ -21,7 +22,7 @@ Page({
     navigationHeight: 72,
     templates: [],
     drafts: [],
-    workings: [],
+    working: null,
     showCustomSize: false,
     customWidth: "40",
     customHeight: "30",
@@ -36,17 +37,16 @@ Page({
 
   onShow() {
     const drafts = storage.listDrafts().map((draft) => ({ ...draft, timeLabel: formatTime(draft.updatedAt) }));
-    const workings = storage.listWorkingWorkspaces().map((item) => ({
-      id: item.id,
-      name: item.name,
-      size: item.size,
-      objectCount: item.objectCount,
-      pageCount: item.pageCount,
-      timeLabel: formatTime(item.updatedAt),
-    }));
+    const workspace = storage.loadWorkingWorkspace();
+    const document = workspace ? activeDocument(workspace) : null;
     this.setData({
       drafts,
-      workings,
+      working: document ? {
+        name: document.name || "未命名标签",
+        size: `${document.width} × ${document.height} mm`,
+        objectCount: workspace.pages.reduce((total, page) => total + page.objects.length, 0),
+        pageCount: workspace.pages.length,
+      } : null,
     });
   },
 
@@ -55,8 +55,8 @@ Page({
     wx.navigateTo({ url: "/pages/editor/index" });
   },
 
-  continueWorking(event) {
-    const workspace = storage.getWorkingWorkspace(event.currentTarget.dataset.id);
+  continueWorking() {
+    const workspace = storage.loadWorkingWorkspace();
     if (workspace) this.openEditor(workspace);
   },
 

@@ -18,7 +18,7 @@ const {
   screenToDocument,
 } = require("../../core/geometry");
 const { MAX_PAGES, createWorkspace, validateWorkspace } = require("../../core/workspace");
-const { readNavigationMetrics } = require("../../core/navigation");
+const { isDevtoolsEnvironment, readNavigationMetrics } = require("../../core/navigation");
 const { CanvasRenderer, rasterizeDocument } = require("../../core/renderer");
 const { getTemplate, listTemplates } = require("../../core/templates");
 const { chooseAndConvertImage, convertDocumentImagesToBitmaps } = require("../../services/image-import");
@@ -95,6 +95,7 @@ Page({
     statusBarHeight: 24,
     menuRightInset: 16,
     navigationHeight: 72,
+    devtoolsCanvasWorkaround: false,
     documentName: "未命名标签",
     sizeLabel: "40 × 30 mm",
     objectCount: 0,
@@ -141,7 +142,10 @@ Page({
   },
 
   onLoad() {
-    this.setData(readNavigationMetrics(wx));
+    this.setData({
+      ...readNavigationMetrics(wx),
+      devtoolsCanvasWorkaround: isDevtoolsEnvironment(wx),
+    });
     const workspace = storage.takePendingWorkspace() || storage.loadWorkingWorkspace() || validateWorkspace(getTemplate("blank-40x30"));
     this.workspaceId = workspace.workspaceId;
     this.pages = workspace.pages;
@@ -614,7 +618,9 @@ Page({
       this.printerService.stopScan().catch(() => {});
       this.setData({ scanning: false });
     }
-    this.setData({ activeSheet: "" });
+    this.setData({ activeSheet: "" }, () => {
+      if (this.data.devtoolsCanvasWorkaround) this.renderCanvas();
+    });
   },
 
   stopPropagation() {},
