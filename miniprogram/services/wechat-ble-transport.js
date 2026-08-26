@@ -46,6 +46,16 @@ function matchesPrinterPrefix(device) {
   return Boolean(printerDeviceName(device));
 }
 
+function isBulkTransfer(data) {
+  return data.length === 512
+    && data[0] === 0x7e
+    && data[1] === 0x5a
+    && data[2] === 0xfc
+    && data[3] === 0x01
+    && data[4] === 0x10
+    && data[5] === 0x02;
+}
+
 class ByteQueue {
   constructor() {
     this.buffer = new Uint8Array();
@@ -240,7 +250,11 @@ class WechatBleTransport {
   async write(value) {
     if (!this.connected) throw new Error("打印机尚未连接");
     const data = value instanceof Uint8Array ? value : new Uint8Array(value);
-    const bulk = data[0] === 0xaa && data[1] === 0xbb;
+    // The SDK hands transports the fixed 512-byte outer frame (7E 5A ...).
+    // AA BB is the nested packet at byte 6, so checking data[0..1] routes
+    // every print payload to the control characteristic and the printer
+    // never receives its raster data.
+    const bulk = isBulkTransfer(data);
     const characteristic = bulk ? this.data : this.control;
     for (let offset = 0; offset < data.length; offset += this.chunkSize) {
       await this.writeChunk(characteristic, data.slice(offset, offset + this.chunkSize));
@@ -257,6 +271,7 @@ module.exports = {
   BULK_NOTIFY_UUID,
   CONTROL_UUID,
   DATA_UUID,
+  isBulkTransfer,
   matchesPrinterPrefix,
   printerDeviceName,
   SERVICE_UUID,
