@@ -1,12 +1,12 @@
 export const FRAME_SIZE = 4096;
-/** @deprecated Legacy 48 mm x 8 dots/mm example; there is no global page width. */
+/** T50 thermal-head width used by every BLE image frame (48 mm x 8 dots/mm). */
 export const PRINT_WIDTH_DOTS = 384;
-/** @deprecated Legacy density paired with PRINT_WIDTH_DOTS. */
+/** Native T50 dot density. */
 export const DOTS_PER_MM = 8;
-/** @deprecated Derived from the legacy 384-dot example; protocol code calculates this per page. */
+/** Fixed byte width of a T50 BLE print line. */
 export const BYTES_PER_LINE = PRINT_WIDTH_DOTS / 8;
 export const FRAME_HEADER_SIZE = 14;
-/** @deprecated Derived from the legacy 384-dot example; protocol code calculates this per page. */
+/** Number of fixed-width T50 BLE lines that fit in one logical frame. */
 export const BLE_MAX_LINES_PER_FRAME = Math.floor(
   (FRAME_SIZE - FRAME_HEADER_SIZE) / BYTES_PER_LINE,
 );

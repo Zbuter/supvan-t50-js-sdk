@@ -145,6 +145,7 @@ class WechatBleTransport {
     };
     this.queue = new ByteQueue();
     this.chunkSize = 20;
+    this.chunkDelayMs = 10;
     this.serviceId = "";
     this.control = null;
     this.data = null;
@@ -158,14 +159,6 @@ class WechatBleTransport {
     await ensureBluetoothAdapter();
     try {
       await callWx("createBLEConnection", { deviceId: this.deviceId, timeout: 10000 });
-      if (wx.setBLEMTU) {
-        try {
-          await callWx("setBLEMTU", { deviceId: this.deviceId, mtu: 247 });
-          this.chunkSize = 180;
-        } catch (_error) {
-          this.chunkSize = 20;
-        }
-      }
       const serviceResult = await callWx("getBLEDeviceServices", { deviceId: this.deviceId });
       const service = (serviceResult.services || []).find((item) => normalizeUuid(item.uuid) === SERVICE_UUID);
       if (!service) throw new Error("设备没有提供 T50 打印服务");
@@ -258,7 +251,7 @@ class WechatBleTransport {
     const characteristic = bulk ? this.data : this.control;
     for (let offset = 0; offset < data.length; offset += this.chunkSize) {
       await this.writeChunk(characteristic, data.slice(offset, offset + this.chunkSize));
-      if (bulk && offset + this.chunkSize < data.length) await delay(3);
+      if (bulk && offset + this.chunkSize < data.length) await delay(this.chunkDelayMs);
     }
   }
 

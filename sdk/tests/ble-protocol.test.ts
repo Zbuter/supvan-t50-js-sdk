@@ -57,6 +57,26 @@ describe("BLE protocol", () => {
     expect(frames[0]?.[6]).toBe(48);
   });
 
+  it("keeps the verified 48-byte BLE line stride for 40 mm media", () => {
+    const settings = resolvePrintSettings({
+      materialWidth: 40,
+      materialHeight: 30,
+      dotsPerMm: 8,
+      gap: 3,
+    });
+    const data = new Uint8Array(320 * 240);
+    data.fill(255);
+    data[120 * 320 + 160] = 0;
+
+    const prepared = prepareBleRaster({ width: 320, height: 240, data }, settings);
+    const frame = bleImageFrames({ width: 320, height: 240, data }, settings, true)[0];
+
+    expect(prepared.width).toBe(240);
+    expect(prepared.height).toBe(384);
+    expect(frame?.[6]).toBe(48);
+    expect(frame?.slice(14).some((value) => value !== 0)).toBe(true);
+  });
+
   it("accepts 50 mm media while rejecting wider material", () => {
     const settings = resolvePrintSettings({ materialWidth: 50, dotsPerMm: 8 });
     expect(settings.materialWidth).toBe(50);

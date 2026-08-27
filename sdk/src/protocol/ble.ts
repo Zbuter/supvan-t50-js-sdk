@@ -1,13 +1,17 @@
 import {
+  BLE_MAX_LINES_PER_FRAME,
+  BYTES_PER_LINE,
   FRAME_HEADER_SIZE,
   FRAME_SIZE,
   PRINT_DIRECTION_TURNS,
+  PRINT_WIDTH_DOTS,
 } from "../constants";
 import { lzmaCompressFrames } from "../compression/lzma";
 import { CommunicationError, ValidationError } from "../errors";
 import {
   createGrayRaster,
   pasteRaster,
+  resizeRaster,
   rotateRaster,
   toGrayscale,
   type GrayRaster,
@@ -166,11 +170,10 @@ export function prepareBleRaster(page: RasterPage, settings: ResolvedPrintSettin
   let source = toGrayscale(page);
   const turns = PRINT_DIRECTION_TURNS[settings.direction];
   source = rotateRaster(source, turns);
-  const printWidth = settings.maxWidthDots;
   const printHeight = Math.max(1, Math.round(settings.materialHeight * settings.dotsPerMm));
-  if (source.width > printWidth) {
+  if (source.width > settings.maxWidthDots) {
     throw new ValidationError(
-      `图像宽度 ${source.width} 点超过当前页面打印宽度 ${printWidth} 点；协议不会自动缩放`,
+      `图像宽度 ${source.width} 点超过当前页面打印宽度 ${settings.maxWidthDots} 点；页面内容不会自动缩放`,
     );
   }
   if (source.height > printHeight) {
@@ -178,8 +181,19 @@ export function prepareBleRaster(page: RasterPage, settings: ResolvedPrintSettin
       `图像高度 ${source.height} 点超过标签高度 ${printHeight} 点；协议不会自动缩放`,
     );
   }
-  const canvas = createGrayRaster(printWidth, printHeight);
-  const x = Math.floor((printWidth - source.width) / 2) + settings.horizontalOffset;
+  // The BLE frame layout is tied to the 384-dot T50 thermal head. Narrower
+  // media changes the content size, not the 48-byte line stride. The verified
+  // reference implementation also scales only content wider than the head.
+  if (source.width > PRINT_WIDTH_DOTS) {
+    const scale = PRINT_WIDTH_DOTS / source.width;
+    source = resizeRaster(
+      source,
+      PRINT_WIDTH_DOTS,
+      Math.max(1, Math.round(source.height * scale)),
+    );
+  }
+  const canvas = createGrayRaster(PRINT_WIDTH_DOTS, printHeight);
+  const x = Math.floor((PRINT_WIDTH_DOTS - source.width) / 2) + settings.horizontalOffset;
   const y = Math.floor((canvas.height - source.height) / 2) + settings.verticalOffset;
   pasteRaster(canvas, source, x, y);
   return rotateRaster(canvas, 3);
@@ -227,9 +241,8 @@ export function bleImageFrames(
   settings: ResolvedPrintSettings,
   jobLastPage = false,
 ): Uint8Array[] {
-  const bytesPerLine = Math.ceil(settings.maxWidthDots / 8);
-  const maxLinesPerFrame = Math.floor((FRAME_SIZE - FRAME_HEADER_SIZE) / bytesPerLine);
-  if (maxLinesPerFrame < 1) throw new ValidationError("当前页面打印点宽超过 BLE 帧容量");
+  const bytesPerLine = BYTES_PER_LINE;
+  const maxLinesPerFrame = BLE_MAX_LINES_PER_FRAME;
   const { columns, leading, trailing } = packColumns(prepareBleRaster(page, settings), bytesPerLine);
   let printable = Math.max(0, columns.length - leading - trailing);
   if (printable === 0) printable = 1;

@@ -89,7 +89,7 @@ interface RasterPage {
 | <code>data</code> | 灰度或 RGBA | 灰度长度必须是 <code>width * height</code>；RGBA 长度必须是 <code>width * height * 4</code> |
 | <code>repeat</code> | 次数 | 当前页面连续打印次数，默认 <code>1</code>，必须是正整数 |
 
-灰度数据使用 <code>0</code> 到 <code>255</code> 表示黑到白。RGBA 数据会先按亮度和透明度转换为灰度，再按热敏阈值转换为黑白。T50 不支持连续灰度打印，灰度值只用于阈值判断；<code>density</code> 调整热敏头打印浓度，也不会产生灰度级别。SDK 不会因为图像太宽而自动缩放；超出 <code>maxWidthDots</code> 会抛出 <code>ValidationError</code>。未指定 <code>maxWidthDots</code> 时，页面可用宽度是 <code>Math.round(materialWidth * dotsPerMm)</code> 点。
+灰度数据使用 <code>0</code> 到 <code>255</code> 表示黑到白。RGBA 数据会先按亮度和透明度转换为灰度，再按热敏阈值转换为黑白。T50 不支持连续灰度打印，灰度值只用于阈值判断；<code>density</code> 调整热敏头打印浓度，也不会产生灰度级别。超出 <code>maxWidthDots</code> 的页面内容会抛出 <code>ValidationError</code>。BLE 图像帧始终使用 T50 的 384 点打印头宽度；窄标签内容居中，50 mm 页面中超过 384 点打印头的内容会等比缩入打印头。
 
 ### <code>PrintJob</code>
 
@@ -633,7 +633,7 @@ const svg = labelDocumentToSvgString(editable);
 | <code>parseLabelBoxData(data)</code> | 从耗材响应数据解析 <code>LabelBoxInfo</code> |
 | <code>parseBleLabelBox(frame)</code> | 校验 <code>0x30</code> BLE 响应并解析耗材信息 |
 | <code>makeParameterBlock(settings)</code> | 根据完整设置生成 BLE 耗材参数块 |
-| <code>prepareBleRaster(page, settings)</code> | 将输入转换为中间灰度图，按公共 <code>direction</code> 方向旋转、居中和偏移；后续会按阈值打包为黑白 BLE 点阵 |
+| <code>prepareBleRaster(page, settings)</code> | 将输入转换为中间灰度图，按公共 <code>direction</code> 旋转并居中到固定 384 点 T50 打印头；后续按固定 48 字节行跨度打包为黑白 BLE 点阵 |
 | <code>bleImageFrames(page, settings, jobLastPage = false)</code> | 生成固定 <code>4096</code> 字节的 BLE 图像帧；最后一页标志由 <code>jobLastPage</code> 控制 |
 | <code>compressedBleBatches(frames, maxFrames = 4)</code> | 将图像帧按批次使用 T50 LZMA 压缩；返回 <code>frameCount</code>、<code>data</code> 和估算 <code>speed</code> |
 | <code>buildPrintBulkPacket(packetIndex, packetCount, data)</code> | 生成 506 字节内层分包；<code>data</code> 最多 500 字节 |
